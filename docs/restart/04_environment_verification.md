@@ -11,7 +11,7 @@ Verifiziert:
 - Lokaler Git-User: `MonKeY-GWG`.
 - Lokale Git-Mail: `monkeygoesnft@gmail.com`.
 - Remote: `https://github.com/MonKeY-GWG/copy_trade.git`.
-- `git ls-remote origin` war erfolgreich und lieferte keine Refs zurueck. Das passt zu einem erreichbaren, leeren Repository.
+- Initial-Commit `a104875d4c1f5337a2bf23ef225e5bef6e84fdf4` wurde nach `origin/main` gepusht und per `git ls-remote origin refs/heads/main` verifiziert.
 
 ## Legacy Archive
 
@@ -25,7 +25,7 @@ Verifiziert:
 
 Verifiziert:
 
-- `ruff` wurde per `python -m pip install --user ruff` installiert.
+- `ruff` wurde per `python -m pip install --user ruff` installiert. Verifizierte Version: `ruff 0.15.12`.
 - `ruff` ist in `requirements.in` aufgenommen.
 - `python -m ruff check apps\api workers\copy_engine packages\domain packages\exchange_adapters` laeuft erfolgreich.
 

@@ -22,7 +22,7 @@ Quellenhierarchie:
 - Die alte NestJS/Next.js/Prisma-Codebasis wurde nach `legacy/2026-04-26-pre-restart/` archiviert und ist lokal von Git ignoriert.
 - Das neue Projektgeruest liegt in `apps/`, `workers/`, `packages/`, `infra/`, `docs/restart/` und `docs/adr/`.
 - Das lokale Git-Repository ist initialisiert, Branch `main`, Remote `https://github.com/MonKeY-GWG/copy_trade.git`.
-- `git ls-remote origin` war erfolgreich und lieferte keine Refs zurueck; das ist konsistent mit einem leeren Remote-Repository.
+- `origin/main` ist auf GitHub gepusht und verweist auf Commit `a104875d4c1f5337a2bf23ef225e5bef6e84fdf4`.
 
 ## Produktentscheidung
 
