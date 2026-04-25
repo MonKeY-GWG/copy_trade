@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+pydantic
+sqlalchemy
+asyncpg
+alembic
+psycopg[binary]
+nats-py
+redis
+httpx
+structlog
+cryptography
+pytest
+pytest-asyncio
+ruff
