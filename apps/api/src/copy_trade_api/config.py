@@ -11,6 +11,7 @@ class Settings:
     database_url: str
     redis_url: str
     nats_url: str
+    admin_api_token: str | None
 
 
 def _env(name: str, default: str) -> str:
@@ -29,4 +30,5 @@ def get_settings() -> Settings:
         ),
         redis_url=_env("REDIS_URL", "redis://localhost:6379/0"),
         nats_url=_env("NATS_URL", "nats://localhost:4222"),
+        admin_api_token=os.getenv("COPY_TRADE_ADMIN_API_TOKEN"),
     )

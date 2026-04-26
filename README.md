@@ -21,15 +21,18 @@ Product source of truth:
 ## Local Checks
 
 ```powershell
-python -m pytest -p no:cacheprovider apps\api\tests workers\copy_engine\tests packages\domain\tests packages\exchange_adapters\tests
-python -m ruff check apps\api workers\copy_engine packages\domain packages\exchange_adapters
+.\.venv\Scripts\python.exe -m ensurepip --upgrade
+.\.venv\Scripts\python.exe -m pip install -r requirements.in
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider
+.\.venv\Scripts\ruff.exe check apps\api workers\copy_engine packages\domain packages\exchange_adapters packages\shared_events infra\migrations
+.\.venv\Scripts\python.exe -m alembic upgrade head
 ```
 
 ## API Smoke Test
 
 ```powershell
-$env:PYTHONPATH='C:\Github\copy_trade\apps\api\src;C:\Github\copy_trade\packages\domain\src;C:\Github\copy_trade\packages\exchange_adapters\src'
-python -m uvicorn copy_trade_api.main:app --host 127.0.0.1 --port 8000
+$env:PYTHONPATH="$PWD\apps\api\src;$PWD\packages\domain\src;$PWD\packages\exchange_adapters\src"
+.\.venv\Scripts\python.exe -m uvicorn copy_trade_api.main:app --host 127.0.0.1 --port 8000
 ```
 
 Then open:

@@ -1,21 +1,64 @@
-from fastapi import FastAPI
+from collections.abc import Awaitable, Callable
+
+from fastapi import Depends, FastAPI, status
+from fastapi.responses import JSONResponse
 
 from copy_trade_api import __version__
-from copy_trade_api.config import get_settings
+from copy_trade_api.audit import (
+    AuditLogRepository,
+    PostgresAuditLogRepository,
+    create_audit_log_router,
+)
+from copy_trade_api.auth import build_admin_dependency
+from copy_trade_api.config import Settings, get_settings
+from copy_trade_api.copy_relationships import (
+    CopyRelationshipRepository,
+    PostgresCopyRelationshipRepository,
+    create_copy_relationship_router,
+)
+from copy_trade_api.identity import AdminCredentialRepository, PostgresAdminCredentialRepository
+from copy_trade_api.readiness import ReadinessReport, check_readiness
+
+ReadinessChecker = Callable[[Settings], Awaitable[ReadinessReport]]
 
 
-def create_app() -> FastAPI:
-    settings = get_settings()
+def create_app(
+    readiness_checker: ReadinessChecker = check_readiness,
+    *,
+    settings: Settings | None = None,
+    copy_relationship_repository: CopyRelationshipRepository | None = None,
+    audit_log_repository: AuditLogRepository | None = None,
+    admin_credential_repository: AdminCredentialRepository | None = None,
+) -> FastAPI:
+    settings = settings or get_settings()
     app = FastAPI(title="Copy Trade API", version=settings.api_version)
+    app.state.copy_relationship_repository = (
+        copy_relationship_repository or PostgresCopyRelationshipRepository(settings)
+    )
+    app.state.audit_log_repository = audit_log_repository or PostgresAuditLogRepository(settings)
+    app.state.admin_credential_repository = (
+        admin_credential_repository or PostgresAdminCredentialRepository(settings)
+    )
+    admin_dependency = Depends(build_admin_dependency(settings))
+    admin_principal_dependency = build_admin_dependency(settings)
+    app.include_router(
+        create_copy_relationship_router(admin_principal_dependency),
+    )
+    app.include_router(
+        create_audit_log_router(),
+        dependencies=[admin_dependency],
+    )
 
     @app.get("/health", tags=["system"])
     async def health() -> dict[str, str]:
         return {"status": "ok", "service": settings.service_name}
 
     @app.get("/ready", tags=["system"])
-    async def ready() -> dict[str, str]:
-        # The first real readiness check will validate postgres, redis and nats.
-        return {"status": "ready"}
+    async def ready() -> JSONResponse:
+        report = await readiness_checker(settings)
+        payload = report.as_response()
+        status_code = status.HTTP_200_OK if report.ready else status.HTTP_503_SERVICE_UNAVAILABLE
+        return JSONResponse(status_code=status_code, content=payload)
 
     @app.get("/version", tags=["system"])
     async def version() -> dict[str, str]:
