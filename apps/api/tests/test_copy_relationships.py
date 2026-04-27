@@ -180,7 +180,14 @@ def make_settings(admin_api_token: str | None = ADMIN_TOKEN) -> Settings:
     return make_settings_for_env(env="test", admin_api_token=admin_api_token)
 
 
-def make_settings_for_env(env: str, admin_api_token: str | None = ADMIN_TOKEN) -> Settings:
+def make_settings_for_env(
+    env: str,
+    admin_api_token: str | None = ADMIN_TOKEN,
+    *,
+    allow_environment_admin_token: bool = False,
+    admin_rate_limit_requests: int = 120,
+    admin_rate_limit_window_seconds: float = 60.0,
+) -> Settings:
     return Settings(
         env=env,
         service_name="copy-trade-api",
@@ -189,6 +196,9 @@ def make_settings_for_env(env: str, admin_api_token: str | None = ADMIN_TOKEN) -
         redis_url="redis://localhost:6379/0",
         nats_url="nats://localhost:4222",
         admin_api_token=admin_api_token,
+        allow_environment_admin_token=allow_environment_admin_token,
+        admin_rate_limit_requests=admin_rate_limit_requests,
+        admin_rate_limit_window_seconds=admin_rate_limit_window_seconds,
     )
 
 
@@ -289,13 +299,17 @@ def make_client(
     admin_credential_repository: FakeAdminCredentialRepository | None = None,
     settings: Settings | None = None,
 ) -> TestClient:
+    effective_settings = settings or make_settings(admin_api_token)
+    if admin_credential_repository is None:
+        admin_credential_repository = FakeAdminCredentialRepository(
+            make_admin_principal() if effective_settings.admin_api_token is not None else None,
+        )
     return TestClient(
         create_app(
-            settings=settings or make_settings(admin_api_token),
+            settings=effective_settings,
             copy_relationship_repository=repository or FakeCopyRelationshipRepository(),
             audit_log_repository=audit_repository or FakeAuditLogRepository(),
-            admin_credential_repository=admin_credential_repository
-            or FakeAdminCredentialRepository(),
+            admin_credential_repository=admin_credential_repository,
         )
     )
 
@@ -364,24 +378,59 @@ def test_copy_relationship_endpoints_reject_non_admin_database_principal() -> No
 
 def test_local_environment_admin_token_is_fallback_when_database_auth_fails() -> None:
     repository = FakeAdminCredentialRepository(error=RuntimeError("database unavailable"))
-    client = make_client(admin_credential_repository=repository)
+    client = make_client(
+        admin_credential_repository=repository,
+        settings=make_settings_for_env("local", allow_environment_admin_token=True),
+    )
 
     response = client.get("/admin/copy-relationships", headers=auth_headers())
 
     assert response.status_code == 200
 
 
-def test_prod_environment_admin_token_is_not_a_database_auth_bypass() -> None:
+def test_environment_admin_token_requires_explicit_flag() -> None:
     repository = FakeAdminCredentialRepository(error=RuntimeError("database unavailable"))
     client = make_client(
         admin_credential_repository=repository,
-        settings=make_settings_for_env("prod"),
+        settings=make_settings_for_env("local", allow_environment_admin_token=False),
     )
 
     response = client.get("/admin/copy-relationships", headers=auth_headers())
 
     assert response.status_code == 503
     assert response.json() == {"detail": "admin identity backend is unavailable"}
+
+
+def test_prod_environment_admin_token_is_not_a_database_auth_bypass() -> None:
+    repository = FakeAdminCredentialRepository(error=RuntimeError("database unavailable"))
+    client = make_client(
+        admin_credential_repository=repository,
+        settings=make_settings_for_env("prod", allow_environment_admin_token=True),
+    )
+
+    response = client.get("/admin/copy-relationships", headers=auth_headers())
+
+    assert response.status_code == 503
+    assert response.json() == {"detail": "admin identity backend is unavailable"}
+
+
+def test_admin_routes_are_rate_limited() -> None:
+    client = make_client(
+        settings=make_settings_for_env(
+            "test",
+            admin_rate_limit_requests=2,
+            admin_rate_limit_window_seconds=60.0,
+        ),
+    )
+
+    first_response = client.get("/admin/copy-relationships", headers=auth_headers())
+    second_response = client.get("/admin/copy-relationships", headers=auth_headers())
+    third_response = client.get("/admin/copy-relationships", headers=auth_headers())
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+    assert third_response.status_code == 429
+    assert third_response.json() == {"detail": "rate limit exceeded"}
 
 
 def test_create_copy_relationship_returns_created_relationship() -> None:

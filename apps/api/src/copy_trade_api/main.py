@@ -27,6 +27,7 @@ from copy_trade_api.foundation_controls import (
     create_foundation_control_router,
 )
 from copy_trade_api.identity import AdminCredentialRepository, PostgresAdminCredentialRepository
+from copy_trade_api.rate_limit import AdminRateLimitMiddleware
 from copy_trade_api.readiness import ReadinessReport, check_readiness
 
 ReadinessChecker = Callable[[Settings], Awaitable[ReadinessReport]]
@@ -44,6 +45,12 @@ def create_app(
 ) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="Copy Trade API", version=settings.api_version)
+    if settings.admin_rate_limit_requests > 0 and settings.admin_rate_limit_window_seconds > 0:
+        app.add_middleware(
+            AdminRateLimitMiddleware,
+            max_requests=settings.admin_rate_limit_requests,
+            window_seconds=settings.admin_rate_limit_window_seconds,
+        )
     app.state.copy_relationship_repository = (
         copy_relationship_repository or PostgresCopyRelationshipRepository(settings)
     )

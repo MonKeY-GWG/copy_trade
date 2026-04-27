@@ -7,6 +7,7 @@ from copy_trade_shared_events.bus import (
     NatsJetStreamEventBus,
     build_publish_headers,
     encode_json_payload,
+    sanitize_dead_letter_payload,
 )
 from copy_trade_shared_events.subjects import (
     ALL_EVENT_SUBJECTS,
@@ -44,4 +45,5 @@ __all__ = [
     "NatsJetStreamEventBus",
     "build_publish_headers",
     "encode_json_payload",
+    "sanitize_dead_letter_payload",
 ]

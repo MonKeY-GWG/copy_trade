@@ -54,6 +54,8 @@ def build_admin_dependency(settings: Settings) -> AdminDependency:
 
 
 def _environment_admin_token_matches(settings: Settings, token: str) -> bool:
+    if not settings.allow_environment_admin_token:
+        return False
     if settings.env.lower() not in ENVIRONMENT_ADMIN_TOKEN_ENVS:
         return False
     if not settings.admin_api_token:

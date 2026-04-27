@@ -40,6 +40,6 @@ Exception-Details werden nicht als freie Lognachricht ausgegeben. Der Payload bl
 
 ## Offene Punkte
 
-- OFFEN: DLQ-Reprocessing-Workflow definieren
-- OFFEN: Monitoring/Alerting fuer DLQ-Events definieren
-- OFFEN: Aufbewahrungs- und Purge-Policy fuer DLQ-Events festlegen
+- OFFEN: DLQ-Reprocessing-Workflow umsetzen; Implementierungsplan siehe `docs/restart/05_open_implementation_plans.md`
+- OFFEN: Monitoring/Alerting fuer DLQ-Events umsetzen; Implementierungsplan siehe `docs/restart/05_open_implementation_plans.md`
+- OFFEN: Aufbewahrungs- und Purge-Policy fuer DLQ-Events festlegen und umsetzen; Implementierungsplan siehe `docs/restart/05_open_implementation_plans.md`

@@ -2,6 +2,7 @@ import json
 from typing import Any, Protocol
 
 from copy_trade_copy_engine.database import DatabasePool
+from copy_trade_shared_events import sanitize_dead_letter_payload
 
 INSERT_DEAD_LETTER_EVENT_SQL = """
 INSERT INTO dead_letter_events (
@@ -39,5 +40,8 @@ class PostgresDeadLetterEventRecorder:
                 int(payload["delivery_attempt"]),
                 int(payload["max_delivery_attempts"]),
                 str(payload["error_type"]),
-                json.dumps(payload.get("payload"), separators=(",", ":")),
+                json.dumps(
+                    sanitize_dead_letter_payload(payload.get("payload")),
+                    separators=(",", ":"),
+                ),
             )

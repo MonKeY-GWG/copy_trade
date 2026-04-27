@@ -34,7 +34,7 @@ Verifiziert:
 Verifiziert:
 
 - `python -m pytest -p no:cacheprovider` laeuft erfolgreich.
-- Stand: 81 Tests, 81 passed.
+- Stand nach Foundation-Security-Hardening: 90 Tests, 90 passed.
 
 ## Docker
 
@@ -65,7 +65,7 @@ Docker Runtime nach Neustart:
   - `/ready` gibt `{"status":"ready","dependencies":{"postgres":"ok","redis":"ok","nats":"ok"}}` zurueck
   - `/version` gibt `{"version":"0.1.0","env":"local"}` zurueck
 - Admin Copy-Relationship API-Smoke-Test im Docker-Stack erfolgreich:
-  - Alembic steht auf `20260426_0006 (head)`
+  - Alembic steht aktuell auf `20260427_0007 (head)`
   - `POST /admin/copy-relationships` mit lokalem Admin-Token erzeugte eine Test-Beziehung
   - `GET /admin/copy-relationships?active=true&source_account_id=...` gab die Test-Beziehung zurueck
   - `PATCH /admin/copy-relationships/{id}` konnte die Test-Beziehung deaktivieren
@@ -111,7 +111,7 @@ Docker Runtime nach Neustart:
   - Im ersten Smoke-Test ohne Copy-Beziehung wurden erwartungsgemaess `requests=0` erzeugt
   - Copy Engine loggt keine Raw-Payloads und keine Account-IDs
 - DB-gestuetzter Copy-Engine-Smoke-Test erfolgreich:
-  - Alembic steht auf `20260426_0006 (head)`
+  - Alembic steht aktuell auf `20260427_0007 (head)`
   - Test-Relationship in PostgreSQL erzeugt
   - Test-Event auf `exchange.trade_event.normalized` publiziert
   - Copy Engine hat `requests=1`, `duplicates=0`, `inactive=0`, `before_follow_start=0` geloggt
@@ -193,7 +193,7 @@ Verifiziert:
 - `pip` fehlte in der vorhandenen venv und wurde mit `ensurepip` wiederhergestellt.
 - `pip install -r requirements.in` wurde nach Netzwerkfreigabe erfolgreich ausgefuehrt.
 - `pip check` meldet keine defekten Abhaengigkeiten.
-- `pytest -p no:cacheprovider` laeuft mit 81 Tests erfolgreich.
+- `pytest -p no:cacheprovider` laeuft mit 90 Tests erfolgreich.
 - `ruff check apps\api workers\copy_engine packages\domain packages\exchange_adapters packages\shared_events` laeuft erfolgreich.
 - API-Smoke-Test ueber Uvicorn erfolgreich:
   - `/health` gibt `{"status":"ok","service":"copy-trade-api"}` zurueck
@@ -208,3 +208,8 @@ OFFEN:
 - OFFEN: DLQ-Reprocessing und Alerting fehlen noch.
 - OFFEN: Echte Secret-Manager-Integration fuer Exchange-Secrets fehlt noch.
 - OFFEN: Echte Exchange-Order-Ausfuehrung ist nicht angeschlossen.
+- OFFEN: Das Admin-Rate-Limit laeuft aktuell pro API-Prozess im Speicher. Vor Betrieb mit mehreren API-Instanzen muss es zentralisiert werden, z. B. ueber Redis oder ein Gateway-Rate-Limit.
+
+Implementierungsplaene:
+
+- Die konkreten Schritte, Akzeptanzkriterien und Verifikationspunkte stehen in `docs/restart/05_open_implementation_plans.md`.

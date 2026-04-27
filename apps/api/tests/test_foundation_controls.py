@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import asyncpg
+import pytest
 from fastapi.testclient import TestClient
 
 from copy_trade_api.config import Settings
@@ -13,6 +15,9 @@ from copy_trade_api.foundation_controls import (
     ExchangeAccountRecord,
     ExchangeAccountStatus,
     ExchangeAccountUpdate,
+    FoundationControlConflictError,
+    FoundationControlReferenceNotFoundError,
+    PostgresFoundationControlRepository,
     RiskSettingsRecord,
     RiskSettingsUpsert,
     SubscriptionRecord,
@@ -39,6 +44,34 @@ class FakeAuthRepository:
         )
 
 
+class FakeTransaction:
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(
+        self,
+        exc_type: object,
+        exc: object,
+        traceback: object,
+    ) -> None:
+        return None
+
+
+class RaisingConnection:
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.closed = False
+
+    def transaction(self) -> FakeTransaction:
+        return FakeTransaction()
+
+    async def fetchrow(self, _query: str, *_args: object) -> dict[str, object] | None:
+        raise self.error
+
+    async def close(self) -> None:
+        self.closed = True
+
+
 class FakeFoundationControlRepository:
     def __init__(self) -> None:
         self.subscription = make_subscription()
@@ -47,6 +80,7 @@ class FakeFoundationControlRepository:
         self.dead_letter_event = make_dead_letter_event()
         self.updated_exchange_payloads: list[ExchangeAccountUpdate] = []
         self.return_none = False
+        self.error: Exception | None = None
 
     async def upsert_subscription(
         self,
@@ -55,6 +89,8 @@ class FakeFoundationControlRepository:
         *,
         principal: AuthenticatedPrincipal,
     ) -> SubscriptionRecord:
+        if self.error is not None:
+            raise self.error
         return make_subscription(
             user_id=user_id,
             status=payload.status,
@@ -79,6 +115,8 @@ class FakeFoundationControlRepository:
         *,
         principal: AuthenticatedPrincipal,
     ) -> ExchangeAccountRecord:
+        if self.error is not None:
+            raise self.error
         return make_exchange_account(
             user_id=payload.user_id,
             exchange=payload.exchange,
@@ -110,6 +148,8 @@ class FakeFoundationControlRepository:
         *,
         principal: AuthenticatedPrincipal,
     ) -> ExchangeAccountRecord | None:
+        if self.error is not None:
+            raise self.error
         self.updated_exchange_payloads.append(payload)
         if self.return_none:
             return None
@@ -125,6 +165,8 @@ class FakeFoundationControlRepository:
         *,
         principal: AuthenticatedPrincipal,
     ) -> RiskSettingsRecord:
+        if self.error is not None:
+            raise self.error
         return make_risk_settings(
             relationship_id=relationship_id,
             enabled=payload.enabled,
@@ -234,7 +276,11 @@ def make_dead_letter_event() -> DeadLetterEventRecord:
         delivery_attempt=3,
         max_delivery_attempts=3,
         error_type="RuntimeError",
-        payload={"event_id": str(uuid4())},
+        payload={
+            "event_id": str(uuid4()),
+            "api_secret": "do-not-return",
+            "raw_response": {"authorization": "Bearer hidden"},
+        },
         status=DeadLetterStatus.OPEN,
         created_at=now,
         updated_at=now,
@@ -255,6 +301,18 @@ def auth_headers() -> dict[str, str]:
     return {"X-Copy-Trade-Admin-Token": ADMIN_TOKEN}
 
 
+def make_principal() -> AuthenticatedPrincipal:
+    user_id = uuid4()
+    return AuthenticatedPrincipal(
+        user_id=user_id,
+        credential_id=uuid4(),
+        roles=("admin",),
+        actor_type="user",
+        actor_id=str(user_id),
+        source="database",
+    )
+
+
 def test_upsert_subscription_returns_subscription_state() -> None:
     repository = FakeFoundationControlRepository()
     client = make_client(repository)
@@ -273,7 +331,22 @@ def test_upsert_subscription_returns_subscription_state() -> None:
     assert body["copy_trading_enabled"] is True
 
 
-def test_create_exchange_account_returns_secret_metadata_only() -> None:
+def test_upsert_subscription_returns_404_for_missing_user() -> None:
+    repository = FakeFoundationControlRepository()
+    repository.error = FoundationControlReferenceNotFoundError("user not found")
+    client = make_client(repository)
+
+    response = client.put(
+        f"/admin/identity/users/{uuid4()}/subscription",
+        headers=auth_headers(),
+        json={"status": "active", "copy_trading_enabled": True},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "user not found"}
+
+
+def test_create_exchange_account_returns_redacted_secret_metadata() -> None:
     repository = FakeFoundationControlRepository()
     client = make_client(repository)
 
@@ -292,9 +365,29 @@ def test_create_exchange_account_returns_secret_metadata_only() -> None:
 
     assert response.status_code == 201
     body = response.json()
-    assert body["secret_reference"] == "secret://copy-trade/test"
-    assert body["secret_fingerprint"] == "a" * 64
-    assert "secret" not in body
+    assert body["has_secret"] is True
+    assert body["secret_fingerprint_prefix"] == "aaaaaaaa"
+    assert "secret_reference" not in body
+    assert "secret_fingerprint" not in body
+
+
+def test_create_exchange_account_returns_409_for_duplicate_account() -> None:
+    repository = FakeFoundationControlRepository()
+    repository.error = FoundationControlConflictError("exchange account already exists")
+    client = make_client(repository)
+
+    response = client.post(
+        "/admin/exchange-accounts",
+        headers=auth_headers(),
+        json={
+            "user_id": str(uuid4()),
+            "exchange": "hyperliquid",
+            "account_id": "trader-1",
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "exchange account already exists"}
 
 
 def test_update_exchange_account_returns_404_for_missing_account() -> None:
@@ -310,6 +403,23 @@ def test_update_exchange_account_returns_404_for_missing_account() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "exchange account not found"}
+
+
+def test_update_exchange_account_can_clear_secret_metadata() -> None:
+    repository = FakeFoundationControlRepository()
+    client = make_client(repository)
+
+    response = client.patch(
+        f"/admin/exchange-accounts/{uuid4()}",
+        headers=auth_headers(),
+        json={"secret_reference": None, "secret_fingerprint": None},
+    )
+
+    assert response.status_code == 200
+    assert repository.updated_exchange_payloads[0].model_fields_set == {
+        "secret_reference",
+        "secret_fingerprint",
+    }
 
 
 def test_upsert_and_get_risk_settings() -> None:
@@ -333,6 +443,21 @@ def test_upsert_and_get_risk_settings() -> None:
     assert get_response.json()["copy_relationship_id"] == str(relationship_id)
 
 
+def test_upsert_risk_settings_returns_404_for_missing_relationship() -> None:
+    repository = FakeFoundationControlRepository()
+    repository.error = FoundationControlReferenceNotFoundError("copy relationship not found")
+    client = make_client(repository)
+
+    response = client.put(
+        f"/admin/copy-relationships/{uuid4()}/risk-settings",
+        headers=auth_headers(),
+        json={"enabled": True, "max_slippage_bps": 50},
+    )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "copy relationship not found"}
+
+
 def test_list_dead_letter_events_returns_operational_view() -> None:
     repository = FakeFoundationControlRepository()
     client = make_client(repository)
@@ -346,3 +471,74 @@ def test_list_dead_letter_events_returns_operational_view() -> None:
     body = response.json()
     assert len(body["items"]) == 1
     assert body["items"][0]["failed_subject"] == "exchange.trade_event.normalized"
+    assert body["items"][0]["payload"]["api_secret"] == "[redacted]"
+    assert body["items"][0]["payload"]["raw_response"] == "[redacted]"
+
+
+async def test_postgres_repository_maps_missing_subscription_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = RaisingConnection(asyncpg.ForeignKeyViolationError("fk"))
+
+    async def fake_connect(_database_url: str) -> RaisingConnection:
+        return connection
+
+    monkeypatch.setattr("copy_trade_api.foundation_controls.connect", fake_connect)
+    repository = PostgresFoundationControlRepository(make_settings())
+
+    with pytest.raises(FoundationControlReferenceNotFoundError, match="user not found"):
+        await repository.upsert_subscription(
+            uuid4(),
+            SubscriptionUpsert(status=SubscriptionStatus.ACTIVE),
+            principal=make_principal(),
+        )
+
+    assert connection.closed is True
+
+
+async def test_postgres_repository_maps_duplicate_exchange_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = RaisingConnection(asyncpg.UniqueViolationError("unique"))
+
+    async def fake_connect(_database_url: str) -> RaisingConnection:
+        return connection
+
+    monkeypatch.setattr("copy_trade_api.foundation_controls.connect", fake_connect)
+    repository = PostgresFoundationControlRepository(make_settings())
+
+    with pytest.raises(FoundationControlConflictError, match="exchange account already exists"):
+        await repository.create_exchange_account(
+            ExchangeAccountCreate(
+                user_id=uuid4(),
+                exchange=Exchange.HYPERLIQUID,
+                account_id="trader-1",
+            ),
+            principal=make_principal(),
+        )
+
+    assert connection.closed is True
+
+
+async def test_postgres_repository_maps_missing_risk_relationship(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    connection = RaisingConnection(asyncpg.ForeignKeyViolationError("fk"))
+
+    async def fake_connect(_database_url: str) -> RaisingConnection:
+        return connection
+
+    monkeypatch.setattr("copy_trade_api.foundation_controls.connect", fake_connect)
+    repository = PostgresFoundationControlRepository(make_settings())
+
+    with pytest.raises(
+        FoundationControlReferenceNotFoundError,
+        match="copy relationship not found",
+    ):
+        await repository.upsert_risk_settings(
+            uuid4(),
+            RiskSettingsUpsert(enabled=True),
+            principal=make_principal(),
+        )
+
+    assert connection.closed is True

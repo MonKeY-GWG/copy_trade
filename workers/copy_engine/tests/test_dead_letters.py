@@ -40,7 +40,11 @@ async def test_postgres_dead_letter_recorder_persists_safe_operational_payload()
             "delivery_attempt": 3,
             "max_delivery_attempts": 3,
             "error_type": "RuntimeError",
-            "payload": {"event_id": "event-1"},
+            "payload": {
+                "api_secret": "hidden",
+                "event_id": "event-1",
+                "raw_event": {"token": "hidden"},
+            },
         }
     )
 
@@ -50,4 +54,6 @@ async def test_postgres_dead_letter_recorder_persists_safe_operational_payload()
     assert args[2] == 3
     assert args[3] == 3
     assert args[4] == "RuntimeError"
-    assert args[5] == '{"event_id":"event-1"}'
+    assert args[5] == (
+        '{"api_secret":"[redacted]","event_id":"event-1","raw_event":"[redacted]"}'
+    )

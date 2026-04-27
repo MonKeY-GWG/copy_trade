@@ -22,6 +22,23 @@ NATS_MSG_ID_HEADER = "Nats-Msg-Id"
 JsonPayload = BaseModel | Mapping[str, Any]
 EventHandler = Callable[["EventBusMessage"], Awaitable[None]]
 DeadLetterPublisher = Callable[[str, Mapping[str, Any]], Awaitable[None]]
+REDACTED_VALUE = "[redacted]"
+TRUNCATED_VALUE = "[truncated]"
+MAX_DEAD_LETTER_PAYLOAD_DEPTH = 8
+MAX_DEAD_LETTER_LIST_ITEMS = 20
+SENSITIVE_KEY_SUBSTRINGS = (
+    "authorization",
+    "apikey",
+    "apisecret",
+    "cookie",
+    "credential",
+    "password",
+    "privatekey",
+    "secret",
+    "signature",
+    "token",
+)
+SENSITIVE_KEY_NAMES = {"raw_event", "raw_response"}
 
 
 @dataclass(frozen=True)
@@ -276,7 +293,7 @@ def build_dead_letter_payload(
         "delivery_attempt": delivery_attempt,
         "max_delivery_attempts": max_delivery_attempts,
         "error_type": type(exc).__name__,
-        "payload": dict(payload) if payload is not None else None,
+        "payload": sanitize_dead_letter_payload(payload),
     }
 
 
@@ -304,6 +321,44 @@ def get_stream_sequence(message: Msg) -> int | None:
         return int(message.metadata.sequence.stream)
     except Exception:
         return None
+
+
+def sanitize_dead_letter_payload(value: Any, *, _depth: int = 0) -> Any:
+    if value is None:
+        return None
+    if _depth >= MAX_DEAD_LETTER_PAYLOAD_DEPTH:
+        return TRUNCATED_VALUE
+    if isinstance(value, Mapping):
+        sanitized: dict[str, Any] = {}
+        for key, nested_value in value.items():
+            key_text = str(key)
+            if is_sensitive_payload_key(key_text):
+                sanitized[key_text] = REDACTED_VALUE
+            else:
+                sanitized[key_text] = sanitize_dead_letter_payload(
+                    nested_value,
+                    _depth=_depth + 1,
+                )
+        return sanitized
+    if isinstance(value, list | tuple):
+        items = [
+            sanitize_dead_letter_payload(item, _depth=_depth + 1)
+            for item in value[:MAX_DEAD_LETTER_LIST_ITEMS]
+        ]
+        if len(value) > MAX_DEAD_LETTER_LIST_ITEMS:
+            items.append(TRUNCATED_VALUE)
+        return items
+    if isinstance(value, str | int | float | bool):
+        return value
+    return str(value)
+
+
+def is_sensitive_payload_key(key: str) -> bool:
+    normalized = key.strip().lower().replace("-", "_")
+    compact = normalized.replace("_", "")
+    return normalized in SENSITIVE_KEY_NAMES or any(
+        sensitive in compact for sensitive in SENSITIVE_KEY_SUBSTRINGS
+    )
 
 
 def encode_json_payload(payload: JsonPayload) -> bytes:

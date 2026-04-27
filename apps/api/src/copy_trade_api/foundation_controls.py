@@ -6,6 +6,7 @@ from enum import StrEnum
 from typing import Annotated, Any, Protocol
 from uuid import UUID
 
+import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -15,6 +16,7 @@ from copy_trade_api.config import Settings
 from copy_trade_api.database import connect
 from copy_trade_api.identity import AuthenticatedPrincipal
 from copy_trade_domain.events import Exchange
+from copy_trade_shared_events import sanitize_dead_letter_payload
 
 
 class SubscriptionStatus(StrEnum):
@@ -47,6 +49,22 @@ AUDIT_ACTION_SUBSCRIPTION_UPSERTED = "user_subscription.upserted"
 AUDIT_ACTION_EXCHANGE_ACCOUNT_CREATED = "exchange_account.created"
 AUDIT_ACTION_EXCHANGE_ACCOUNT_UPDATED = "exchange_account.updated"
 AUDIT_ACTION_RISK_SETTINGS_UPSERTED = "copy_relationship_risk_settings.upserted"
+
+
+class FoundationControlError(Exception):
+    status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+    def __init__(self, detail: str) -> None:
+        super().__init__(detail)
+        self.detail = detail
+
+
+class FoundationControlReferenceNotFoundError(FoundationControlError):
+    status_code = status.HTTP_404_NOT_FOUND
+
+
+class FoundationControlConflictError(FoundationControlError):
+    status_code = status.HTTP_409_CONFLICT
 
 UPSERT_SUBSCRIPTION_SQL = """
 INSERT INTO user_subscriptions (
@@ -242,13 +260,10 @@ class ExchangeAccountUpdate(BaseModel):
 
     @model_validator(mode="after")
     def require_change(self) -> "ExchangeAccountUpdate":
-        if (
-            self.label is None
-            and self.status is None
-            and self.secret_reference is None
-            and self.secret_fingerprint is None
-        ):
+        if not self.model_fields_set:
             raise ValueError("at least one field must be provided")
+        if "status" in self.model_fields_set and self.status is None:
+            raise ValueError("status cannot be null")
         return self
 
 
@@ -259,8 +274,8 @@ class ExchangeAccountResponse(BaseModel):
     account_id: str
     label: str | None
     status: ExchangeAccountStatus
-    secret_reference: str | None
-    secret_fingerprint: str | None
+    has_secret: bool
+    secret_fingerprint_prefix: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -408,6 +423,8 @@ class PostgresFoundationControlRepository:
                     before_state=None,
                     after_state=subscription_to_response(record).model_dump(mode="json"),
                 )
+        except asyncpg.ForeignKeyViolationError as exc:
+            raise FoundationControlReferenceNotFoundError("user not found") from exc
         finally:
             await connection.close()
         return record
@@ -464,6 +481,10 @@ class PostgresFoundationControlRepository:
                     before_state=None,
                     after_state=exchange_account_to_response(record).model_dump(mode="json"),
                 )
+        except asyncpg.ForeignKeyViolationError as exc:
+            raise FoundationControlReferenceNotFoundError("user not found") from exc
+        except asyncpg.UniqueViolationError as exc:
+            raise FoundationControlConflictError("exchange account already exists") from exc
         finally:
             await connection.close()
         return record
@@ -507,10 +528,11 @@ class PostgresFoundationControlRepository:
         assignments: list[str] = []
         args: list[object] = []
         for field_name in ("label", "status", "secret_reference", "secret_fingerprint"):
+            if field_name not in payload.model_fields_set:
+                continue
             value = getattr(payload, field_name)
-            if value is not None:
-                args.append(value.value if isinstance(value, StrEnum) else value)
-                assignments.append(f"{field_name} = ${len(args)}")
+            args.append(value.value if isinstance(value, StrEnum) else value)
+            assignments.append(f"{field_name} = ${len(args)}")
         if not assignments:
             return None
 
@@ -577,6 +599,8 @@ class PostgresFoundationControlRepository:
                     before_state=None,
                     after_state=risk_settings_to_response(record).model_dump(mode="json"),
                 )
+        except asyncpg.ForeignKeyViolationError as exc:
+            raise FoundationControlReferenceNotFoundError("copy relationship not found") from exc
         finally:
             await connection.close()
         return record
@@ -643,7 +667,10 @@ def create_foundation_control_router(admin_dependency: AdminDependency) -> APIRo
         repository: FoundationControlRepositoryDependency,
         principal: Annotated[AuthenticatedPrincipal, Depends(admin_dependency)],
     ) -> SubscriptionResponse:
-        record = await repository.upsert_subscription(user_id, payload, principal=principal)
+        try:
+            record = await repository.upsert_subscription(user_id, payload, principal=principal)
+        except FoundationControlError as exc:
+            raise _foundation_http_error(exc) from exc
         return subscription_to_response(record)
 
     @router.get(
@@ -678,7 +705,10 @@ def create_foundation_control_router(admin_dependency: AdminDependency) -> APIRo
         repository: FoundationControlRepositoryDependency,
         principal: Annotated[AuthenticatedPrincipal, Depends(admin_dependency)],
     ) -> ExchangeAccountResponse:
-        record = await repository.create_exchange_account(payload, principal=principal)
+        try:
+            record = await repository.create_exchange_account(payload, principal=principal)
+        except FoundationControlError as exc:
+            raise _foundation_http_error(exc) from exc
         return exchange_account_to_response(record)
 
     @router.get("/admin/exchange-accounts", response_model=ExchangeAccountListResponse)
@@ -712,11 +742,14 @@ def create_foundation_control_router(admin_dependency: AdminDependency) -> APIRo
         repository: FoundationControlRepositoryDependency,
         principal: Annotated[AuthenticatedPrincipal, Depends(admin_dependency)],
     ) -> ExchangeAccountResponse:
-        record = await repository.update_exchange_account(
-            account_id,
-            payload,
-            principal=principal,
-        )
+        try:
+            record = await repository.update_exchange_account(
+                account_id,
+                payload,
+                principal=principal,
+            )
+        except FoundationControlError as exc:
+            raise _foundation_http_error(exc) from exc
         if record is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -734,11 +767,14 @@ def create_foundation_control_router(admin_dependency: AdminDependency) -> APIRo
         repository: FoundationControlRepositoryDependency,
         principal: Annotated[AuthenticatedPrincipal, Depends(admin_dependency)],
     ) -> RiskSettingsResponse:
-        record = await repository.upsert_risk_settings(
-            relationship_id,
-            payload,
-            principal=principal,
-        )
+        try:
+            record = await repository.upsert_risk_settings(
+                relationship_id,
+                payload,
+                principal=principal,
+            )
+        except FoundationControlError as exc:
+            raise _foundation_http_error(exc) from exc
         return risk_settings_to_response(record)
 
     @router.get(
@@ -785,7 +821,20 @@ def subscription_to_response(record: SubscriptionRecord) -> SubscriptionResponse
 
 
 def exchange_account_to_response(record: ExchangeAccountRecord) -> ExchangeAccountResponse:
-    return ExchangeAccountResponse.model_validate(record, from_attributes=True)
+    return ExchangeAccountResponse(
+        id=record.id,
+        user_id=record.user_id,
+        exchange=record.exchange,
+        account_id=record.account_id,
+        label=record.label,
+        status=record.status,
+        has_secret=record.secret_reference is not None or record.secret_fingerprint is not None,
+        secret_fingerprint_prefix=(
+            record.secret_fingerprint[:8] if record.secret_fingerprint is not None else None
+        ),
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
 
 
 def risk_settings_to_response(record: RiskSettingsRecord) -> RiskSettingsResponse:
@@ -793,7 +842,22 @@ def risk_settings_to_response(record: RiskSettingsRecord) -> RiskSettingsRespons
 
 
 def dead_letter_event_to_response(record: DeadLetterEventRecord) -> DeadLetterEventResponse:
-    return DeadLetterEventResponse.model_validate(record, from_attributes=True)
+    return DeadLetterEventResponse(
+        id=record.id,
+        idempotency_key=record.idempotency_key,
+        failed_subject=record.failed_subject,
+        delivery_attempt=record.delivery_attempt,
+        max_delivery_attempts=record.max_delivery_attempts,
+        error_type=record.error_type,
+        payload=sanitize_dead_letter_payload(record.payload),
+        status=record.status,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _foundation_http_error(error: FoundationControlError) -> HTTPException:
+    return HTTPException(status_code=error.status_code, detail=error.detail)
 
 
 def _row_to_subscription(row: Any) -> SubscriptionRecord:

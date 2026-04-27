@@ -170,7 +170,10 @@ async def test_handle_message_sends_to_dead_letter_after_final_attempt() -> None
         published.append({"subject": subject, "payload": payload})
 
     message = FakeMessage(
-        b'{"event_id":"event-1","idempotency_key":"source-key-1"}',
+        (
+            b'{"event_id":"event-1","idempotency_key":"source-key-1",'
+            b'"api_secret":"hidden","raw_response":{"authorization":"Bearer hidden"}}'
+        ),
         num_delivered=3,
         stream_sequence=42,
     )
@@ -194,8 +197,10 @@ async def test_handle_message_sends_to_dead_letter_after_final_attempt() -> None
                 "max_delivery_attempts": 3,
                 "error_type": "RuntimeError",
                 "payload": {
+                    "api_secret": "[redacted]",
                     "event_id": "event-1",
                     "idempotency_key": "source-key-1",
+                    "raw_response": "[redacted]",
                 },
             },
         },
