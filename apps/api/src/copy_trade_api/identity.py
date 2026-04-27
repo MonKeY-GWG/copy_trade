@@ -41,6 +41,7 @@ class AuthenticatedPrincipal:
     actor_type: str
     actor_id: str | None
     source: str
+    session_id: UUID | None = None
 
 
 class AdminCredentialRepository(Protocol):

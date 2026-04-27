@@ -402,7 +402,7 @@ async def test_postgres_repository_create_stores_hash_and_writes_safe_audit(
 ) -> None:
     user_id = uuid4()
     credential_id = uuid4()
-    user_row = make_row(user_id=user_id)
+    user_row = make_row(credential_id=user_id, user_id=user_id)
     credential_row = make_row(credential_id=credential_id, user_id=user_id)
     connection = FakeConnection([user_row, credential_row])
 
@@ -431,6 +431,40 @@ async def test_postgres_repository_create_stores_hash_and_writes_safe_audit(
     assert created.token not in str(audit_args)
     assert "token_hash" not in str(audit_args)
     assert connection.closed is True
+
+
+async def test_postgres_repository_create_can_store_password_without_plaintext(
+    monkeypatch,
+) -> None:
+    user_id = uuid4()
+    credential_id = uuid4()
+    user_row = make_row(credential_id=user_id, user_id=user_id)
+    credential_row = make_row(credential_id=credential_id, user_id=user_id)
+    connection = FakeConnection([user_row, credential_row])
+
+    async def fake_connect(_database_url: str) -> FakeConnection:
+        return connection
+
+    monkeypatch.setattr("copy_trade_api.admin_credentials.connect", fake_connect)
+    monkeypatch.setattr(
+        "copy_trade_api.admin_credentials.generate_admin_api_token",
+        lambda: "created-token-" + ("z" * 32),
+    )
+    repository = PostgresAdminCredentialManagementRepository(make_settings())
+
+    await repository.create_admin_credential(
+        AdminCredentialCreate(
+            email="Admin@Example.Test",
+            display_name="Admin",
+            password="correct horse battery staple",
+        ),
+        principal=make_principal(),
+    )
+
+    password_args = connection.execute_calls[1]
+    assert password_args[1] == user_id
+    assert str(password_args[2]).startswith("scrypt$")
+    assert "correct horse battery staple" not in str(connection.execute_calls)
 
 
 async def test_postgres_repository_rotate_audits_old_and_new_credentials(monkeypatch) -> None:

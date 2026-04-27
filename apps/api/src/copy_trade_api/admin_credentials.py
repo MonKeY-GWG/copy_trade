@@ -20,6 +20,7 @@ from copy_trade_api.identity import (
     hash_api_token,
     is_admin_api_token_candidate,
 )
+from copy_trade_api.sessions import hash_password
 
 TOKEN_PREFIX_LENGTH = 8
 AUDIT_ENTITY_API_CREDENTIAL = "api_credential"
@@ -49,6 +50,20 @@ INSERT_USER_ROLE_SQL = """
 INSERT INTO user_roles (user_id, role_id)
 VALUES ($1, $2)
 ON CONFLICT DO NOTHING
+"""
+
+UPSERT_PASSWORD_CREDENTIAL_SQL = """
+INSERT INTO password_credentials (
+    id,
+    user_id,
+    password_hash,
+    active
+) VALUES ($1, $2, $3, true)
+ON CONFLICT (user_id) DO UPDATE
+SET
+    password_hash = EXCLUDED.password_hash,
+    active = true,
+    updated_at = now()
 """
 
 INSERT_ADMIN_CREDENTIAL_SQL = """
@@ -137,6 +152,7 @@ class AdminCredentialCreate(BaseModel):
 
     email: str = Field(min_length=3, max_length=254)
     display_name: str | None = Field(default=None, min_length=1, max_length=128)
+    password: str | None = Field(default=None, min_length=12, max_length=256)
 
     @field_validator("email")
     @classmethod
@@ -231,6 +247,13 @@ class PostgresAdminCredentialManagementRepository:
                     user_row["id"],
                     admin_role_id,
                 )
+                if payload.password is not None:
+                    await connection.execute(
+                        UPSERT_PASSWORD_CREDENTIAL_SQL,
+                        uuid4(),
+                        user_row["id"],
+                        hash_password(payload.password),
+                    )
                 credential_row = await insert_admin_credential_row(
                     connection,
                     credential_id=credential_id,

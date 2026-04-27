@@ -7,6 +7,29 @@ Die Reihenfolge entspricht der aktuellen Prioritaet von oben nach unten.
 
 ## 1. UI-Verwaltung und Login-/Sessionfluss
 
+### Status
+
+- Backend-Session-Fundament ist begonnen:
+  - Migration fuer `password_credentials` und `user_sessions` angelegt
+  - `POST /auth/login`, `GET /auth/session` und `POST /auth/logout` implementiert
+  - Admin-Routen akzeptieren Session-Cookies mit CSRF-Schutz fuer mutierende Requests
+  - Admin-Credential-Erzeugung kann optional ein erstes Passwort fuer UI-Login setzen
+- Frontend-App unter `apps/web` ist als erste Next.js Operations Console angelegt:
+  - Login-Screen
+  - Session-Anzeige
+  - Systemstatus-Links
+  - Admin-Credentials-Verwaltung mit Create, List, Active/All-Filter, Rotate und Deactivate
+  - Subscription-Verwaltung mit List, Status-Filter, Upsert und Copy-Trading-Gate
+  - Exchange-Accounts-Verwaltung mit Create, List, Status-Filter, Status-Patch und Secret-Metadaten-Clear
+  - Copy-Relationships-Verwaltung mit Create, List, Active/All-Filter und Activate/Deactivate
+  - Risk-Settings-Verwaltung mit Load und Upsert fuer Relationship-Gates
+  - DLQ-Event-Sicht mit Status-Filter und redigierter Payload-Anzeige
+  - Audit-Log-Sicht mit Entity-/Action-Filter und JSON-State-Anzeige
+  - Navigation/Platzhalter fuer die weiteren Foundation-Controls
+- OFFEN: Password-Change-/Reset-Flow fehlt noch
+- OFFEN: UI fuer Users/Roles fehlt noch
+- OFFEN: Browser-E2E-Tests fuer die Foundation-Control-UI fehlen noch
+
 ### Ziel
 
 Eine echte Verwaltungsoberflaeche schaffen, die nicht mehr direkt mit Bootstrap-Admin-Token bedient werden muss.
@@ -49,19 +72,19 @@ Die UI soll Foundation-Controls nutzbar machen, ohne Security-Regeln aufzuweiche
 ### UI-Schritte
 
 1. App-Shell erstellen:
-   - Login-Screen
-   - geschuetztes Admin-Layout
-   - Navigation fuer Foundation-Controls
+   - ERLEDIGT: Login-Screen
+   - ERLEDIGT: geschuetztes Admin-Layout
+   - ERLEDIGT: Navigation fuer Foundation-Controls
 2. Seiten in dieser Reihenfolge:
-   - Dashboard/Systemstatus
-   - Admin-Credentials
+   - ERLEDIGT: Dashboard/Systemstatus
+   - ERLEDIGT: Admin-Credentials
+   - ERLEDIGT: Subscriptions
+   - ERLEDIGT: Exchange-Accounts
+   - ERLEDIGT: Copy-Relationships
+   - ERLEDIGT: Risk Settings
+   - ERLEDIGT: DLQ-Events als lesende Operator-Sicht
+   - ERLEDIGT: Audit Logs als lesende Operator-Sicht
    - Users/Roles
-   - Subscriptions
-   - Exchange-Accounts
-   - Copy-Relationships
-   - Risk Settings
-   - DLQ-Events
-   - Audit Logs
 3. API-Client mit typisierten Contracts erstellen.
 4. Fehler- und Ladezustaende konsequent bauen:
    - 401/403
@@ -81,7 +104,7 @@ Die UI soll Foundation-Controls nutzbar machen, ohne Security-Regeln aufzuweiche
 ### Verifikation
 
 - Backend: Pytest fuer Auth-Repository, API-Routen und Session-Ablauf.
-- Frontend: TypeScript-Check, Lint, Komponenten-/API-Client-Tests.
+- Frontend: TypeScript-Check, Build, Audit, spaeter Komponenten-/API-Client-Tests.
 - E2E: Login, Navigation, Create/Update von Foundation-Controls, Logout.
 
 ## 2. DLQ-Reprocessing, Alerting und Retention

@@ -54,7 +54,8 @@ class AdminRateLimitMiddleware:
             await self._app(scope, receive, send)
             return
 
-        if str(scope.get("path", "")).startswith("/admin/"):
+        path = str(scope.get("path", ""))
+        if path.startswith("/admin/") or path == "/auth/login":
             client_key = _client_key(scope)
             if not self._limiter.allow(client_key):
                 response = JSONResponse(

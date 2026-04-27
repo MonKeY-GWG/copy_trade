@@ -14,6 +14,18 @@ API danach lokal:
 - `http://localhost:8000/health`
 - `http://localhost:8000/ready`
 - `http://localhost:8000/version`
+- `http://localhost:8000/auth/session`
+
+Web UI lokal:
+
+```powershell
+cd D:\VSC_Projekte\Copy_Trade\apps\web
+cmd /c npm install
+cmd /c npm run dev
+```
+
+- `http://localhost:3000`
+- Die API erlaubt lokale Web-Credentials ueber `COPY_TRADE_CORS_ORIGINS=http://localhost:3000`.
 
 ## Lokale Python-Tests
 
@@ -42,15 +54,20 @@ Die Admin-API ist ueber den Header `X-Copy-Trade-Admin-Token` geschuetzt.
 Authentifizierung:
 
 - Primaer: DB-gestuetzte Admin-Credentials in `api_credentials`.
+- Fuer Browser/UI-Flows gibt es zusaetzlich DB-gestuetzte `HttpOnly`-Sessions.
 - Tokens werden nicht im Klartext gespeichert, sondern als SHA-256-Hash.
 - DB-Admin-Tokens muessen mindestens 32 Zeichen lang sein.
 - Ein Credential ist nur gueltig, wenn `api_credentials.active=true`, der User `active` ist und die Rolle `admin` besitzt.
 - Der lokale Env-Token `COPY_TRADE_ADMIN_API_TOKEN` aus `infra/docker/.env.example` ist nur ein Bootstrap-Fallback, wenn `COPY_TRADE_ALLOW_ENV_ADMIN_TOKEN=true` gesetzt ist und `COPY_TRADE_ENV` auf `local`/`test`/`dev` steht. Das ist kein Produktivpfad.
+- Session-Cookies werden serverseitig ueber `user_sessions` geprueft. Mutierende Admin-Routen verlangen bei Session-Auth zusaetzlich `X-Copy-Trade-CSRF-Token`.
 
 Bei DB-Auth schreibt die API Audit-Logs mit `actor_type=user` und `actor_id=<user_id>`. Beim lokalen Env-Fallback bleibt der Actor `admin_api`.
 
 Verfuegbare Foundation-Endpunkte:
 
+- `POST /auth/login`
+- `GET /auth/session`
+- `POST /auth/logout`
 - `POST /admin/identity/admin-credentials`
 - `GET /admin/identity/admin-credentials`
 - `POST /admin/identity/admin-credentials/{credential_id}/deactivate`
@@ -68,7 +85,7 @@ Verfuegbare Foundation-Endpunkte:
 - `GET /admin/audit-logs`
 - `GET /admin/operations/dead-letter-events`
 
-Admin-Credential-Erzeugung gibt den Klartext-Token nur einmal in der Create- oder Rotate-Response zurueck. Listen-, Deactivate-, Rotate- und Audit-Responses enthalten keinen Token-Hash und keinen Klartext-Token.
+Admin-Credential-Erzeugung gibt den Klartext-Token nur einmal in der Create- oder Rotate-Response zurueck. Optional kann dabei ein erstes Passwort fuer UI-Login gesetzt werden. Listen-, Deactivate-, Rotate- und Audit-Responses enthalten keinen Token-Hash, keinen Klartext-Token und keine Passwortdaten.
 Rotation schreibt Audit-Events fuer das alte deaktivierte Credential und das neu erzeugte Credential, damit beide Credential-IDs forensisch auffindbar bleiben.
 Exchange-Account-Responses enthalten nur `has_secret` und `secret_fingerprint_prefix`; vollstaendige Secret-Referenzen, Fingerprints und Exchange-Secrets werden nicht ausgegeben.
 Die Copy Engine erzeugt Copy-Execution-Requests nur, wenn Relationship, Exchange-Accounts, User, Subscription und Risk Settings aktiv beziehungsweise gueltig sind.
@@ -102,8 +119,15 @@ Wenn `pip` in der vorhandenen venv fehlt:
 - Die Copy Engine erzeugt nur Dry-Run-`CopyExecutionRequest`s.
 - Es gibt noch keine echte Exchange-Order-Ausfuehrung.
 - Copy-Relationship-Verwaltung existiert als Admin-API, aber noch nicht ueber UI.
-- Identity-Foundation mit Users/Roles/API-Credentials existiert, aber noch ohne Login, Session, JWT, Passwortfluss oder UI-Verwaltung.
-- Admin-Credentials koennen per Admin-API erzeugt, gelistet, deaktiviert und rotiert werden.
+- Identity-Foundation mit Users/Roles/API-Credentials und DB-gestuetzten Browser-Sessions existiert; Password-Change-/Reset-Flow fehlt noch.
+- Admin-Credentials koennen per Admin-API und ueber die Web UI erzeugt, gelistet, deaktiviert und rotiert werden.
+- Subscriptions koennen per Admin-API und ueber die Web UI gelistet und gesetzt werden.
+- Exchange-Accounts koennen per Admin-API und ueber die Web UI erzeugt, gelistet und im Status geaendert werden; Secret-Metadaten koennen geloescht, aber nicht ausgelesen werden.
+- Copy-Relationships koennen per Admin-API und ueber die Web UI erzeugt, gelistet, aktiviert und deaktiviert werden.
+- Risk Settings koennen per Admin-API und ueber die Web UI geladen und gesetzt werden.
+- DLQ-Events koennen per Admin-API und ueber die Web UI gelesen und nach Status gefiltert werden; Reprocessing und Alerting fehlen noch.
+- Audit Logs koennen per Admin-API und ueber die Web UI gelesen und gefiltert werden.
+- UI fuer Users/Roles fehlt noch.
 - Subscription-, Exchange-Account- und Risk-Gates existieren als Foundation-Controls.
 - Dead-Letter-Events werden in PostgreSQL gespeichert und koennen administrativ gelistet werden.
 - GitHub Actions CI prueft Ruff, Pytest, Alembic-Heads und einfache Secret-Pattern.

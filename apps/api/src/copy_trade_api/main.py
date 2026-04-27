@@ -1,6 +1,7 @@
 from collections.abc import Awaitable, Callable
 
 from fastapi import Depends, FastAPI, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from copy_trade_api import __version__
@@ -29,6 +30,11 @@ from copy_trade_api.foundation_controls import (
 from copy_trade_api.identity import AdminCredentialRepository, PostgresAdminCredentialRepository
 from copy_trade_api.rate_limit import AdminRateLimitMiddleware
 from copy_trade_api.readiness import ReadinessReport, check_readiness
+from copy_trade_api.sessions import (
+    PostgresUserSessionRepository,
+    UserSessionRepository,
+    create_auth_router,
+)
 
 ReadinessChecker = Callable[[Settings], Awaitable[ReadinessReport]]
 
@@ -42,9 +48,21 @@ def create_app(
     admin_credential_repository: AdminCredentialRepository | None = None,
     admin_credential_management_repository: AdminCredentialManagementRepository | None = None,
     foundation_control_repository: FoundationControlRepository | None = None,
+    session_repository: UserSessionRepository | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="Copy Trade API", version=settings.api_version)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(settings.cors_origins),
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=[
+            "Content-Type",
+            "X-Copy-Trade-Admin-Token",
+            "X-Copy-Trade-CSRF-Token",
+        ],
+    )
     if settings.admin_rate_limit_requests > 0 and settings.admin_rate_limit_window_seconds > 0:
         app.add_middleware(
             AdminRateLimitMiddleware,
@@ -65,8 +83,10 @@ def create_app(
     app.state.foundation_control_repository = (
         foundation_control_repository or PostgresFoundationControlRepository(settings)
     )
+    app.state.session_repository = session_repository or PostgresUserSessionRepository(settings)
     admin_dependency = Depends(build_admin_dependency(settings))
     admin_principal_dependency = build_admin_dependency(settings)
+    app.include_router(create_auth_router(settings))
     app.include_router(
         create_admin_credential_router(admin_principal_dependency),
     )

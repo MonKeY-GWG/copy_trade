@@ -34,7 +34,7 @@ Verifiziert:
 Verifiziert:
 
 - `python -m pytest -p no:cacheprovider` laeuft erfolgreich.
-- Stand nach Foundation-Security-Hardening: 90 Tests, 90 passed.
+- Stand nach Login-/Session-Fundament: 98 Tests, 98 passed.
 
 ## Docker
 
@@ -65,7 +65,7 @@ Docker Runtime nach Neustart:
   - `/ready` gibt `{"status":"ready","dependencies":{"postgres":"ok","redis":"ok","nats":"ok"}}` zurueck
   - `/version` gibt `{"version":"0.1.0","env":"local"}` zurueck
 - Admin Copy-Relationship API-Smoke-Test im Docker-Stack erfolgreich:
-  - Alembic steht aktuell auf `20260427_0007 (head)`
+  - Alembic steht aktuell auf `20260427_0008 (head)`
   - `POST /admin/copy-relationships` mit lokalem Admin-Token erzeugte eine Test-Beziehung
   - `GET /admin/copy-relationships?active=true&source_account_id=...` gab die Test-Beziehung zurueck
   - `PATCH /admin/copy-relationships/{id}` konnte die Test-Beziehung deaktivieren
@@ -89,6 +89,12 @@ Docker Runtime nach Neustart:
   - Audit-Suche nach neuer Credential-ID fand `admin_credential.rotation_created`
   - Audit-Responses enthielten keinen Klartext-Token und keinen `token_hash`
   - Smoke-Datensaetze wurden aus `audit_logs`, `api_credentials`, `user_roles` und `users` entfernt
+- Login-/Session-Smoke-Test im Docker-Stack erfolgreich:
+  - Admin-User mit Passwort ueber `POST /admin/identity/admin-credentials` erzeugt
+  - `POST /auth/login` setzte Session- und CSRF-Cookies
+  - `GET /auth/session` gab den eingeloggten User zurueck
+  - `POST /auth/logout` mit `X-Copy-Trade-CSRF-Token` erfolgreich
+  - Smoke-Datensaetze wurden aus `users` entfernt; abhaengige Daten wurden per Cascade bereinigt
 - Foundation-Gates-Smoke-Test im Docker-Stack erfolgreich:
   - Admin-Credential/User erzeugt
   - Subscription auf `active` mit `copy_trading_enabled=true` gesetzt
@@ -111,7 +117,7 @@ Docker Runtime nach Neustart:
   - Im ersten Smoke-Test ohne Copy-Beziehung wurden erwartungsgemaess `requests=0` erzeugt
   - Copy Engine loggt keine Raw-Payloads und keine Account-IDs
 - DB-gestuetzter Copy-Engine-Smoke-Test erfolgreich:
-  - Alembic steht aktuell auf `20260427_0007 (head)`
+  - Alembic steht aktuell auf `20260427_0008 (head)`
   - Test-Relationship in PostgreSQL erzeugt
   - Test-Event auf `exchange.trade_event.normalized` publiziert
   - Copy Engine hat `requests=1`, `duplicates=0`, `inactive=0`, `before_follow_start=0` geloggt
@@ -187,13 +193,26 @@ Verifiziert:
 - Node.js LTS wurde per Winget installiert.
 - `node --version` meldet `v24.15.0`.
 - `npm --version` meldet `11.12.1`.
+- `apps/web` ist als Next.js/TypeScript Operations Console initialisiert.
+- `cmd /c npm install` in `apps/web` erfolgreich.
+- `cmd /c npm audit --json` in `apps/web` meldet 0 Vulnerabilities.
+- `cmd /c npm run typecheck` in `apps/web` erfolgreich.
+- `cmd /c npm run build` in `apps/web` erfolgreich.
+- Next.js Dev-Server antwortet lokal auf `http://localhost:3000` mit HTTP 200.
+- Operations Console enthaelt Login/Session sowie Admin-Credentials-UI fuer Create, List, Active/All-Filter, Rotate und Deactivate.
+- Operations Console enthaelt Subscription-UI fuer List, Status-Filter, Upsert und Copy-Trading-Gate.
+- Operations Console enthaelt Exchange-Accounts-UI fuer Create, List, Status-Filter, Status-Patch und Secret-Metadaten-Clear.
+- Operations Console enthaelt Copy-Relationships-UI fuer Create, List, Active/All-Filter und Activate/Deactivate.
+- Operations Console enthaelt Risk-Settings-UI fuer Load und Upsert pro Copy-Relationship.
+- Operations Console enthaelt DLQ-Event-UI fuer Status-Filter und redigierte Payload-Anzeige.
+- Operations Console enthaelt Audit-Log-UI fuer Entity-/Action-Filter und JSON-State-Anzeige.
 - Docker Desktop wurde installiert, Docker CLI und Compose sind verfuegbar.
 - Der Benutzer-PATH wurde fuer Python, Git, Node und Docker aktualisiert. Neue Terminals/VS Code-Fenster muessen ggf. neu gestartet werden.
 - `.venv\Scripts\python.exe` funktioniert mit Python 3.11.9.
 - `pip` fehlte in der vorhandenen venv und wurde mit `ensurepip` wiederhergestellt.
 - `pip install -r requirements.in` wurde nach Netzwerkfreigabe erfolgreich ausgefuehrt.
 - `pip check` meldet keine defekten Abhaengigkeiten.
-- `pytest -p no:cacheprovider` laeuft mit 90 Tests erfolgreich.
+- `pytest -p no:cacheprovider` laeuft mit 98 Tests erfolgreich.
 - `ruff check apps\api workers\copy_engine packages\domain packages\exchange_adapters packages\shared_events` laeuft erfolgreich.
 - API-Smoke-Test ueber Uvicorn erfolgreich:
   - `/health` gibt `{"status":"ok","service":"copy-trade-api"}` zurueck
@@ -204,7 +223,9 @@ Verifiziert:
 
 OFFEN:
 
-- OFFEN: UI-Verwaltung und Login-/Sessionfluss fehlen noch.
+- OFFEN: Password-Change-/Reset-Flow fehlt noch.
+- OFFEN: UI fuer Users/Roles fehlt noch.
+- OFFEN: Browser-E2E-Tests fuer die Foundation-Control-UI fehlen noch.
 - OFFEN: DLQ-Reprocessing und Alerting fehlen noch.
 - OFFEN: Echte Secret-Manager-Integration fuer Exchange-Secrets fehlt noch.
 - OFFEN: Echte Exchange-Order-Ausfuehrung ist nicht angeschlossen.
