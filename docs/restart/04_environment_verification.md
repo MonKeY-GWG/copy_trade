@@ -1,6 +1,6 @@
 # Environment Verification
 
-Stand: 2026-04-26
+Stand: 2026-04-27
 
 ## Git
 
@@ -34,17 +34,17 @@ Verifiziert:
 Verifiziert:
 
 - `python -m pytest -p no:cacheprovider` laeuft erfolgreich.
-- Stand: 58 Tests, 58 passed.
+- Stand: 71 Tests, 71 passed.
 
 ## Docker
 
 Verifiziert:
 
-- Docker Desktop wurde per `winget install --id Docker.DockerDesktop --exact` installiert.
-- Installierte Docker Desktop Version: `4.70.0`.
+- Docker Desktop wurde per `winget install --id Docker.DockerDesktop --exact` installiert und am 2026-04-27 auf `4.71.0` aktualisiert.
+- Installierte Docker Desktop Version: `4.71.0`.
 - Docker CLI ist vorhanden unter `C:\Program Files\Docker\Docker\resources\bin\docker.exe`.
-- `docker --version` meldet `Docker version 29.4.0`.
-- `docker compose version` meldet `Docker Compose version v5.1.2`.
+- `docker --version` meldet `Docker version 29.4.1`.
+- `docker compose version` meldet `Docker Compose version v5.1.3`.
 - `docker compose -f infra\docker\docker-compose.yml --env-file infra\docker\.env.example config` validiert die lokale Compose-Konfiguration erfolgreich.
 - `com.docker.service` ist installiert und konnte als Administrator gestartet werden.
 
@@ -52,7 +52,7 @@ Docker Runtime nach Neustart:
 
 - Keine offenen Docker-Basisblocker nach Neustart.
 - Docker Engine ist erreichbar.
-- `docker info --format '{{.ServerVersion}} {{.OperatingSystem}} {{.NCPU}}'` meldet `29.4.0 Docker Desktop 32`.
+- `docker info --format '{{.ServerVersion}} {{.OperatingSystem}} {{.NCPU}}'` meldet `29.4.1 Docker Desktop 32`.
 - Der lokale Compose-Stack wurde mit `docker compose -f infra\docker\docker-compose.yml --env-file infra\docker\.env.example up --build -d` erfolgreich gestartet.
 - Containerstatus:
   - `api`: running, Port `8000`
@@ -79,6 +79,16 @@ Docker Runtime nach Neustart:
   - `PATCH /admin/copy-relationships/{id}` mit DB-Token erfolgreich
   - `GET /admin/audit-logs` gab zwei Audit-Events mit `actor_type=user` und passender `actor_id` zurueck
   - Smoke-Datensaetze wurden aus `audit_logs`, `copy_relationships`, `api_credentials`, `user_roles` und `users` entfernt
+- Admin-Credential-Management-Smoke-Test im Docker-Stack erfolgreich:
+  - `POST /admin/identity/admin-credentials` erzeugte einen Admin-User und ein DB-Credential
+  - Create-Response gab den Klartext-Token nur einmalig zurueck
+  - `GET /admin/identity/admin-credentials?active=true` gab Credential-Metadaten ohne Token und ohne `token_hash` zurueck
+  - `POST /admin/identity/admin-credentials/{id}/rotate` deaktivierte das alte Credential und erzeugte ein neues Credential
+  - `POST /admin/identity/admin-credentials/{id}/deactivate` deaktivierte das neue Credential
+  - Audit-Suche nach alter Credential-ID fand `admin_credential.rotated`
+  - Audit-Suche nach neuer Credential-ID fand `admin_credential.rotation_created`
+  - Audit-Responses enthielten keinen Klartext-Token und keinen `token_hash`
+  - Smoke-Datensaetze wurden aus `audit_logs`, `api_credentials`, `user_roles` und `users` entfernt
 - NATS-Healthcheck ueber `http://127.0.0.1:8222/healthz` gibt `{"status":"ok"}` zurueck.
 - JetStream-Smoke-Test erfolgreich:
   - Test-Event auf `exchange.trade_event.normalized` publiziert
@@ -101,9 +111,25 @@ Docker Runtime nach Neustart:
 - Retry-/DLQ-Smoke-Test erfolgreich:
   - `COPY_TRADE_EVENTS` enthaelt `system.dead_letter.created`
   - Copy-Engine-Durable-Consumer stehen auf `max_deliver=3` und `ack_wait=30.0`
-  - Isolierter Smoke-Consumer mit `max_deliver=2` erzeugte nach finalem Fehler ein Dead-Letter-Event
+- Isolierter Smoke-Consumer mit `max_deliver=2` erzeugte nach finalem Fehler ein Dead-Letter-Event
   - Dead-Letter-Event enthielt `failed_subject=exchange.order_update.normalized`, `delivery_attempt=2`, `max_delivery_attempts=2`, `error_type=RuntimeError`
   - Smoke-Durable-Consumer wurden nach dem Test entfernt
+
+Docker Update am 2026-04-27:
+
+- Docker Desktop wurde auf `4.71.0` aktualisiert.
+- Docker CLI meldet `Docker version 29.4.1`.
+- Docker Compose meldet `Docker Compose version v5.1.3`.
+- Docker Engine ist erreichbar und meldet `29.4.1 Docker Desktop 32`.
+- Nach dem Update war der Compose-Stack zunaechst gestoppt und wurde mit `docker compose -f infra\docker\docker-compose.yml --env-file infra\docker\.env.example up -d` wieder gestartet.
+- Containerstatus nach Neustart:
+  - `api`: running, Port `8000`
+  - `copy_engine`: running
+  - `nats`: running, healthy
+  - `postgres`: running, healthy
+  - `redis`: running, healthy
+- `/ready` gibt `{"status":"ready","dependencies":{"postgres":"ok","redis":"ok","nats":"ok"}}` zurueck.
+- API- und Copy-Engine-Logs zeigen nur normale Start- und Subscription-Meldungen.
 
 Behobene Docker-Startprobleme:
 
@@ -153,7 +179,7 @@ Verifiziert:
 - `pip` fehlte in der vorhandenen venv und wurde mit `ensurepip` wiederhergestellt.
 - `pip install -r requirements.in` wurde nach Netzwerkfreigabe erfolgreich ausgefuehrt.
 - `pip check` meldet keine defekten Abhaengigkeiten.
-- `pytest -p no:cacheprovider` laeuft mit 58 Tests erfolgreich.
+- `pytest -p no:cacheprovider` laeuft mit 71 Tests erfolgreich.
 - `ruff check apps\api workers\copy_engine packages\domain packages\exchange_adapters packages\shared_events` laeuft erfolgreich.
 - API-Smoke-Test ueber Uvicorn erfolgreich:
   - `/health` gibt `{"status":"ok","service":"copy-trade-api"}` zurueck
@@ -164,6 +190,6 @@ Verifiziert:
 
 OFFEN:
 
-- OFFEN: UI-Verwaltung, Login-/Sessionfluss und Credential-Rotation fuer Copy-Relationships fehlen noch.
+- OFFEN: UI-Verwaltung und Login-/Sessionfluss fuer Copy-Relationships fehlen noch.
 - OFFEN: DLQ-Reprocessing und Alerting fehlen noch.
 - OFFEN: Echte Exchange-Order-Ausfuehrung ist nicht angeschlossen.

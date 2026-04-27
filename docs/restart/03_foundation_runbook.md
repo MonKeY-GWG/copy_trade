@@ -1,6 +1,6 @@
 # Foundation Runbook
 
-Stand: 2026-04-26
+Stand: 2026-04-27
 
 ## Lokaler Start
 
@@ -51,10 +51,17 @@ Bei DB-Auth schreibt die API Audit-Logs mit `actor_type=user` und `actor_id=<use
 
 Verfuegbare Foundation-Endpunkte:
 
+- `POST /admin/identity/admin-credentials`
+- `GET /admin/identity/admin-credentials`
+- `POST /admin/identity/admin-credentials/{credential_id}/deactivate`
+- `POST /admin/identity/admin-credentials/{credential_id}/rotate`
 - `POST /admin/copy-relationships`
 - `GET /admin/copy-relationships`
 - `PATCH /admin/copy-relationships/{relationship_id}`
 - `GET /admin/audit-logs`
+
+Admin-Credential-Erzeugung gibt den Klartext-Token nur einmal in der Create- oder Rotate-Response zurueck. Listen-, Deactivate-, Rotate- und Audit-Responses enthalten keinen Token-Hash und keinen Klartext-Token.
+Rotation schreibt Audit-Events fuer das alte deaktivierte Credential und das neu erzeugte Credential, damit beide Credential-IDs forensisch auffindbar bleiben.
 
 Es gibt bewusst kein `DELETE`. Beziehungen werden deaktiviert, damit Verlauf und Auditierbarkeit erhalten bleiben.
 Create- und Patch-Aktionen fuer Copy-Relationships schreiben transaktionale Audit-Logs ohne Admin-Token oder Request-Header.
@@ -86,6 +93,7 @@ Wenn `pip` in der vorhandenen venv fehlt:
 - Es gibt noch keine echte Exchange-Order-Ausfuehrung.
 - Copy-Relationship-Verwaltung existiert als Admin-API, aber noch nicht ueber UI.
 - Identity-Foundation mit Users/Roles/API-Credentials existiert, aber noch ohne Login, Session, JWT, Passwortfluss oder UI-Verwaltung.
+- Admin-Credentials koennen per Admin-API erzeugt, gelistet, deaktiviert und rotiert werden.
 - Admin-Aenderungen an Copy-Relationships werden auditierbar gespeichert.
 - Execution-Requests und Execution-Results werden persistiert.
 - Result-Events koennen Request-Status auf `ACCEPTED`, `REJECTED`, `FILLED` oder `FAILED` setzen.

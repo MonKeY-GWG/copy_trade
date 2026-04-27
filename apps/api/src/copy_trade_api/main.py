@@ -4,6 +4,11 @@ from fastapi import Depends, FastAPI, status
 from fastapi.responses import JSONResponse
 
 from copy_trade_api import __version__
+from copy_trade_api.admin_credentials import (
+    AdminCredentialManagementRepository,
+    PostgresAdminCredentialManagementRepository,
+    create_admin_credential_router,
+)
 from copy_trade_api.audit import (
     AuditLogRepository,
     PostgresAuditLogRepository,
@@ -29,6 +34,7 @@ def create_app(
     copy_relationship_repository: CopyRelationshipRepository | None = None,
     audit_log_repository: AuditLogRepository | None = None,
     admin_credential_repository: AdminCredentialRepository | None = None,
+    admin_credential_management_repository: AdminCredentialManagementRepository | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="Copy Trade API", version=settings.api_version)
@@ -39,8 +45,15 @@ def create_app(
     app.state.admin_credential_repository = (
         admin_credential_repository or PostgresAdminCredentialRepository(settings)
     )
+    app.state.admin_credential_management_repository = (
+        admin_credential_management_repository
+        or PostgresAdminCredentialManagementRepository(settings)
+    )
     admin_dependency = Depends(build_admin_dependency(settings))
     admin_principal_dependency = build_admin_dependency(settings)
+    app.include_router(
+        create_admin_credential_router(admin_principal_dependency),
+    )
     app.include_router(
         create_copy_relationship_router(admin_principal_dependency),
     )
