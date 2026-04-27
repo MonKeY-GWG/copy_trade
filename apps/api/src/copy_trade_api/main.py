@@ -21,6 +21,11 @@ from copy_trade_api.copy_relationships import (
     PostgresCopyRelationshipRepository,
     create_copy_relationship_router,
 )
+from copy_trade_api.foundation_controls import (
+    FoundationControlRepository,
+    PostgresFoundationControlRepository,
+    create_foundation_control_router,
+)
 from copy_trade_api.identity import AdminCredentialRepository, PostgresAdminCredentialRepository
 from copy_trade_api.readiness import ReadinessReport, check_readiness
 
@@ -35,6 +40,7 @@ def create_app(
     audit_log_repository: AuditLogRepository | None = None,
     admin_credential_repository: AdminCredentialRepository | None = None,
     admin_credential_management_repository: AdminCredentialManagementRepository | None = None,
+    foundation_control_repository: FoundationControlRepository | None = None,
 ) -> FastAPI:
     settings = settings or get_settings()
     app = FastAPI(title="Copy Trade API", version=settings.api_version)
@@ -49,10 +55,16 @@ def create_app(
         admin_credential_management_repository
         or PostgresAdminCredentialManagementRepository(settings)
     )
+    app.state.foundation_control_repository = (
+        foundation_control_repository or PostgresFoundationControlRepository(settings)
+    )
     admin_dependency = Depends(build_admin_dependency(settings))
     admin_principal_dependency = build_admin_dependency(settings)
     app.include_router(
         create_admin_credential_router(admin_principal_dependency),
+    )
+    app.include_router(
+        create_foundation_control_router(admin_principal_dependency),
     )
     app.include_router(
         create_copy_relationship_router(admin_principal_dependency),

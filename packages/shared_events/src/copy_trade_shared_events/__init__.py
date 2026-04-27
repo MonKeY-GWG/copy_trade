@@ -10,6 +10,7 @@ from copy_trade_shared_events.bus import (
 )
 from copy_trade_shared_events.subjects import (
     ALL_EVENT_SUBJECTS,
+    COPY_ENGINE_DEAD_LETTER_DURABLE,
     COPY_ENGINE_EXECUTION_RESULT_DURABLES,
     COPY_ENGINE_NORMALIZED_TRADES_DURABLE,
     COPY_EXECUTION_ACCEPTED,
@@ -25,6 +26,7 @@ from copy_trade_shared_events.subjects import (
 
 __all__ = [
     "ALL_EVENT_SUBJECTS",
+    "COPY_ENGINE_DEAD_LETTER_DURABLE",
     "COPY_ENGINE_EXECUTION_RESULT_DURABLES",
     "COPY_ENGINE_NORMALIZED_TRADES_DURABLE",
     "COPY_EXECUTION_ACCEPTED",

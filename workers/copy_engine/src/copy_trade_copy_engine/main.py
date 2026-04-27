@@ -5,6 +5,11 @@ from typing import Protocol
 
 from copy_trade_copy_engine.config import Settings, get_settings
 from copy_trade_copy_engine.database import DatabasePool, create_asyncpg_pool
+from copy_trade_copy_engine.dead_letters import (
+    DeadLetterEventRecorder,
+    NoopDeadLetterEventRecorder,
+    PostgresDeadLetterEventRecorder,
+)
 from copy_trade_copy_engine.execution_requests import (
     CopyExecutionRequestRecorder,
     NoopCopyExecutionRequestRecorder,
@@ -20,10 +25,12 @@ from copy_trade_copy_engine.processor import CopyEventProcessor
 from copy_trade_copy_engine.relationships import PostgresCopyRelationshipProvider
 from copy_trade_domain.events import CopyExecutionResult, NormalizedOrderEvent
 from copy_trade_shared_events import (
+    COPY_ENGINE_DEAD_LETTER_DURABLE,
     COPY_ENGINE_EXECUTION_RESULT_DURABLES,
     COPY_ENGINE_NORMALIZED_TRADES_DURABLE,
     COPY_EXECUTION_REQUESTED,
     COPY_EXECUTION_RESULT_SUBJECTS,
+    DEAD_LETTER_EVENT_CREATED,
     EXCHANGE_TRADE_EVENT_NORMALIZED,
     EventBusMessage,
     NatsJetStreamEventBus,
@@ -108,6 +115,23 @@ def build_copy_execution_result_handler(
     return handler
 
 
+async def handle_dead_letter_event(
+    message: EventBusMessage,
+    *,
+    dead_letter_recorder: DeadLetterEventRecorder,
+) -> None:
+    await dead_letter_recorder.record(message.data)
+
+
+def build_dead_letter_handler(
+    dead_letter_recorder: DeadLetterEventRecorder,
+) -> EventHandler:
+    async def handler(message: EventBusMessage) -> None:
+        await handle_dead_letter_event(message, dead_letter_recorder=dead_letter_recorder)
+
+    return handler
+
+
 async def run(
     *,
     settings: Settings | None = None,
@@ -116,6 +140,7 @@ async def run(
     database_pool: DatabasePool | None = None,
     request_recorder: CopyExecutionRequestRecorder | None = None,
     result_recorder: CopyExecutionResultRecorder | None = None,
+    dead_letter_recorder: DeadLetterEventRecorder | None = None,
     stop_event: asyncio.Event | None = None,
 ) -> None:
     settings = settings or get_settings()
@@ -135,11 +160,15 @@ async def run(
                 request_recorder = PostgresCopyExecutionRequestRecorder(database_pool)
             if result_recorder is None:
                 result_recorder = PostgresCopyExecutionResultRecorder(database_pool)
+            if dead_letter_recorder is None:
+                dead_letter_recorder = PostgresDeadLetterEventRecorder(database_pool)
 
         if request_recorder is None:
             request_recorder = NoopCopyExecutionRequestRecorder()
         if result_recorder is None:
             result_recorder = NoopCopyExecutionResultRecorder()
+        if dead_letter_recorder is None:
+            dead_letter_recorder = NoopDeadLetterEventRecorder()
 
         if event_bus is None:
             event_bus = await NatsJetStreamEventBus(
@@ -170,6 +199,16 @@ async def run(
                 subject,
                 COPY_ENGINE_EXECUTION_RESULT_DURABLES[subject],
             )
+        await event_bus.subscribe_json(
+            DEAD_LETTER_EVENT_CREATED,
+            durable=COPY_ENGINE_DEAD_LETTER_DURABLE,
+            handler=build_dead_letter_handler(dead_letter_recorder),
+        )
+        logger.info(
+            "copy engine subscribed subject=%s durable=%s",
+            DEAD_LETTER_EVENT_CREATED,
+            COPY_ENGINE_DEAD_LETTER_DURABLE,
+        )
         await (stop_event or asyncio.Event()).wait()
     finally:
         if owns_event_bus:

@@ -11,6 +11,7 @@ from copy_trade_copy_engine.config import Settings
 from copy_trade_copy_engine.idempotency import InMemoryIdempotencyStore
 from copy_trade_copy_engine.main import (
     build_copy_execution_result_handler,
+    build_dead_letter_handler,
     build_normalized_trade_handler,
     run,
 )
@@ -27,11 +28,13 @@ from copy_trade_domain.events import (
     PositionSide,
 )
 from copy_trade_shared_events import (
+    COPY_ENGINE_DEAD_LETTER_DURABLE,
     COPY_ENGINE_EXECUTION_RESULT_DURABLES,
     COPY_ENGINE_NORMALIZED_TRADES_DURABLE,
     COPY_EXECUTION_FILLED,
     COPY_EXECUTION_REQUESTED,
     COPY_EXECUTION_RESULT_SUBJECTS,
+    DEAD_LETTER_EVENT_CREATED,
     EXCHANGE_TRADE_EVENT_NORMALIZED,
     EventBusMessage,
 )
@@ -87,6 +90,14 @@ class RecordingResultRecorder:
         self.results.append(result)
 
 
+class RecordingDeadLetterRecorder:
+    def __init__(self) -> None:
+        self.payloads: list[dict[str, Any]] = []
+
+    async def record(self, payload: dict[str, Any]) -> None:
+        self.payloads.append(payload)
+
+
 class StaticRelationshipProvider:
     def __init__(self, relationships: Sequence[CopyRelationship]) -> None:
         self._relationships = relationships
@@ -133,7 +144,7 @@ async def test_run_subscribes_to_normalized_trade_events() -> None:
         stop_event=stop_event,
     )
 
-    assert len(event_bus.subscriptions) == 1 + len(COPY_EXECUTION_RESULT_SUBJECTS)
+    assert len(event_bus.subscriptions) == 2 + len(COPY_EXECUTION_RESULT_SUBJECTS)
     subscriptions = {item["subject"]: item for item in event_bus.subscriptions}
     assert subscriptions[EXCHANGE_TRADE_EVENT_NORMALIZED]["durable"] == (
         COPY_ENGINE_NORMALIZED_TRADES_DURABLE
@@ -141,6 +152,7 @@ async def test_run_subscribes_to_normalized_trade_events() -> None:
     for subject in COPY_EXECUTION_RESULT_SUBJECTS:
         assert subscriptions[subject]["durable"] == COPY_ENGINE_EXECUTION_RESULT_DURABLES[subject]
         assert callable(subscriptions[subject]["handler"])
+    assert subscriptions[DEAD_LETTER_EVENT_CREATED]["durable"] == COPY_ENGINE_DEAD_LETTER_DURABLE
     assert event_bus.closed is False
 
 
@@ -243,3 +255,20 @@ async def test_execution_result_handler_records_result() -> None:
     )
 
     assert recorder.results == [result]
+
+
+async def test_dead_letter_handler_records_operational_event() -> None:
+    recorder = RecordingDeadLetterRecorder()
+    handler = build_dead_letter_handler(recorder)
+    payload = {
+        "idempotency_key": "dlq:test",
+        "failed_subject": "exchange.trade_event.normalized",
+        "delivery_attempt": 3,
+        "max_delivery_attempts": 3,
+        "error_type": "RuntimeError",
+        "payload": {"event_id": "event-1"},
+    }
+
+    await handler(EventBusMessage(subject=DEAD_LETTER_EVENT_CREATED, data=payload))
+
+    assert recorder.payloads == [payload]

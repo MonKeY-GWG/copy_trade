@@ -128,3 +128,66 @@ async def test_processor_skips_inactive_relationship() -> None:
 
     assert result.requests == ()
     assert result.skipped_inactive == 1
+
+
+async def test_processor_skips_relationship_without_active_exchange_accounts() -> None:
+    event = make_event()
+    relationship = CopyRelationship(
+        copy_relationship_id=uuid4(),
+        follower_account_id="follower-1",
+        target_exchange=Exchange.BLOFIN,
+        target_symbol="BTC-USDT",
+        effective_from=event.occurred_at - timedelta(seconds=1),
+        follower_account_status="disabled",
+    )
+    processor = CopyEventProcessor(
+        relationship_provider=StaticRelationshipProvider((relationship,)),
+        idempotency_store=InMemoryIdempotencyStore(),
+    )
+
+    result = await processor.process_normalized_order_event(event)
+
+    assert result.requests == ()
+    assert result.skipped_exchange_account == 1
+
+
+async def test_processor_skips_relationship_without_active_subscription() -> None:
+    event = make_event()
+    relationship = CopyRelationship(
+        copy_relationship_id=uuid4(),
+        follower_account_id="follower-1",
+        target_exchange=Exchange.BLOFIN,
+        target_symbol="BTC-USDT",
+        effective_from=event.occurred_at - timedelta(seconds=1),
+        subscription_status="past_due",
+    )
+    processor = CopyEventProcessor(
+        relationship_provider=StaticRelationshipProvider((relationship,)),
+        idempotency_store=InMemoryIdempotencyStore(),
+    )
+
+    result = await processor.process_normalized_order_event(event)
+
+    assert result.requests == ()
+    assert result.skipped_subscription == 1
+
+
+async def test_processor_skips_relationship_when_risk_limit_fails() -> None:
+    event = make_event()
+    relationship = CopyRelationship(
+        copy_relationship_id=uuid4(),
+        follower_account_id="follower-1",
+        target_exchange=Exchange.BLOFIN,
+        target_symbol="BTC-USDT",
+        effective_from=event.occurred_at - timedelta(seconds=1),
+        risk_max_order_quantity=Decimal("0.001"),
+    )
+    processor = CopyEventProcessor(
+        relationship_provider=StaticRelationshipProvider((relationship,)),
+        idempotency_store=InMemoryIdempotencyStore(),
+    )
+
+    result = await processor.process_normalized_order_event(event)
+
+    assert result.requests == ()
+    assert result.skipped_risk == 1

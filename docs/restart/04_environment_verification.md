@@ -34,7 +34,7 @@ Verifiziert:
 Verifiziert:
 
 - `python -m pytest -p no:cacheprovider` laeuft erfolgreich.
-- Stand: 71 Tests, 71 passed.
+- Stand: 81 Tests, 81 passed.
 
 ## Docker
 
@@ -89,6 +89,20 @@ Docker Runtime nach Neustart:
   - Audit-Suche nach neuer Credential-ID fand `admin_credential.rotation_created`
   - Audit-Responses enthielten keinen Klartext-Token und keinen `token_hash`
   - Smoke-Datensaetze wurden aus `audit_logs`, `api_credentials`, `user_roles` und `users` entfernt
+- Foundation-Gates-Smoke-Test im Docker-Stack erfolgreich:
+  - Admin-Credential/User erzeugt
+  - Subscription auf `active` mit `copy_trading_enabled=true` gesetzt
+  - Aktive Source- und Follower-Exchange-Accounts mit Secret-Referenz/Fingerprint erzeugt
+  - Copy-Relationship erzeugt
+  - Risk Settings fuer Relationship gesetzt
+  - Normalisiertes Trade-Event auf `exchange.trade_event.normalized` publiziert
+  - Copy Engine erzeugte einen Dry-Run-Request mit Status `PUBLISHED`
+  - Smoke-Datensaetze wurden aus Execution-, Relationship-, Audit-, Exchange-, Subscription-, Credential- und User-Tabellen entfernt
+- DLQ-Persistenz-Smoke-Test im Docker-Stack erfolgreich:
+  - `system.dead_letter.created` Event publiziert
+  - Copy Engine persistierte das Event in `dead_letter_events`
+  - Persistierter Status war `open`
+  - Smoke-Datensatz wurde entfernt
 - NATS-Healthcheck ueber `http://127.0.0.1:8222/healthz` gibt `{"status":"ok"}` zurueck.
 - JetStream-Smoke-Test erfolgreich:
   - Test-Event auf `exchange.trade_event.normalized` publiziert
@@ -179,7 +193,7 @@ Verifiziert:
 - `pip` fehlte in der vorhandenen venv und wurde mit `ensurepip` wiederhergestellt.
 - `pip install -r requirements.in` wurde nach Netzwerkfreigabe erfolgreich ausgefuehrt.
 - `pip check` meldet keine defekten Abhaengigkeiten.
-- `pytest -p no:cacheprovider` laeuft mit 71 Tests erfolgreich.
+- `pytest -p no:cacheprovider` laeuft mit 81 Tests erfolgreich.
 - `ruff check apps\api workers\copy_engine packages\domain packages\exchange_adapters packages\shared_events` laeuft erfolgreich.
 - API-Smoke-Test ueber Uvicorn erfolgreich:
   - `/health` gibt `{"status":"ok","service":"copy-trade-api"}` zurueck
@@ -190,6 +204,7 @@ Verifiziert:
 
 OFFEN:
 
-- OFFEN: UI-Verwaltung und Login-/Sessionfluss fuer Copy-Relationships fehlen noch.
+- OFFEN: UI-Verwaltung und Login-/Sessionfluss fehlen noch.
 - OFFEN: DLQ-Reprocessing und Alerting fehlen noch.
+- OFFEN: Echte Secret-Manager-Integration fuer Exchange-Secrets fehlt noch.
 - OFFEN: Echte Exchange-Order-Ausfuehrung ist nicht angeschlossen.

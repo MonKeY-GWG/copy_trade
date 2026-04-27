@@ -19,6 +19,9 @@ class ProcessingResult:
     skipped_duplicates: int
     skipped_inactive: int
     skipped_before_follow_start: int
+    skipped_exchange_account: int = 0
+    skipped_subscription: int = 0
+    skipped_risk: int = 0
 
 
 class CopyEventProcessor:
@@ -49,10 +52,22 @@ class CopyEventProcessor:
         skipped_duplicates = 0
         skipped_inactive = 0
         skipped_before_follow_start = 0
+        skipped_exchange_account = 0
+        skipped_subscription = 0
+        skipped_risk = 0
 
         for relationship in relationships:
             if not relationship.active:
                 skipped_inactive += 1
+                continue
+            if not relationship_has_active_exchange_accounts(relationship):
+                skipped_exchange_account += 1
+                continue
+            if not relationship_has_active_subscription(relationship):
+                skipped_subscription += 1
+                continue
+            if not relationship_passes_risk_settings(event, relationship):
+                skipped_risk += 1
                 continue
             if not event_is_after_follow_start(event, relationship.effective_from):
                 skipped_before_follow_start += 1
@@ -72,13 +87,17 @@ class CopyEventProcessor:
 
         logger.info(
             "normalized trade event processed event_id=%s trace_id=%s requests=%s "
-            "duplicates=%s inactive=%s before_follow_start=%s",
+            "duplicates=%s inactive=%s before_follow_start=%s exchange_account=%s "
+            "subscription=%s risk=%s",
             event.event_id,
             event.trace_id,
             len(requests),
             skipped_duplicates,
             skipped_inactive,
             skipped_before_follow_start,
+            skipped_exchange_account,
+            skipped_subscription,
+            skipped_risk,
         )
 
         return ProcessingResult(
@@ -86,4 +105,42 @@ class CopyEventProcessor:
             skipped_duplicates=skipped_duplicates,
             skipped_inactive=skipped_inactive,
             skipped_before_follow_start=skipped_before_follow_start,
+            skipped_exchange_account=skipped_exchange_account,
+            skipped_subscription=skipped_subscription,
+            skipped_risk=skipped_risk,
         )
+
+
+def relationship_has_active_exchange_accounts(relationship: CopyRelationship) -> bool:
+    return (
+        relationship.source_account_status == "active"
+        and relationship.follower_account_status == "active"
+        and relationship.follower_user_status == "active"
+    )
+
+
+def relationship_has_active_subscription(relationship: CopyRelationship) -> bool:
+    return (
+        relationship.subscription_status in {"active", "trialing"}
+        and relationship.copy_trading_enabled
+    )
+
+
+def relationship_passes_risk_settings(
+    event: NormalizedOrderEvent,
+    relationship: CopyRelationship,
+) -> bool:
+    if not relationship.risk_enabled:
+        return False
+    if relationship.risk_max_slippage_bps is None:
+        return False
+    if relationship.max_slippage_bps > relationship.risk_max_slippage_bps:
+        return False
+    if (
+        relationship.risk_max_order_quantity is not None
+        and event.quantity > relationship.risk_max_order_quantity
+    ):
+        return False
+    if relationship.risk_max_leverage is not None and event.leverage is not None:
+        return event.leverage <= relationship.risk_max_leverage
+    return True

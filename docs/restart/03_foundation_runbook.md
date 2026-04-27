@@ -55,13 +55,23 @@ Verfuegbare Foundation-Endpunkte:
 - `GET /admin/identity/admin-credentials`
 - `POST /admin/identity/admin-credentials/{credential_id}/deactivate`
 - `POST /admin/identity/admin-credentials/{credential_id}/rotate`
+- `PUT /admin/identity/users/{user_id}/subscription`
+- `GET /admin/identity/subscriptions`
+- `POST /admin/exchange-accounts`
+- `GET /admin/exchange-accounts`
+- `PATCH /admin/exchange-accounts/{account_id}`
 - `POST /admin/copy-relationships`
 - `GET /admin/copy-relationships`
 - `PATCH /admin/copy-relationships/{relationship_id}`
+- `PUT /admin/copy-relationships/{relationship_id}/risk-settings`
+- `GET /admin/copy-relationships/{relationship_id}/risk-settings`
 - `GET /admin/audit-logs`
+- `GET /admin/operations/dead-letter-events`
 
 Admin-Credential-Erzeugung gibt den Klartext-Token nur einmal in der Create- oder Rotate-Response zurueck. Listen-, Deactivate-, Rotate- und Audit-Responses enthalten keinen Token-Hash und keinen Klartext-Token.
 Rotation schreibt Audit-Events fuer das alte deaktivierte Credential und das neu erzeugte Credential, damit beide Credential-IDs forensisch auffindbar bleiben.
+Exchange-Account-Responses enthalten nur Secret-Referenz und Secret-Fingerprint, aber keine Exchange-Secrets.
+Die Copy Engine erzeugt Copy-Execution-Requests nur, wenn Relationship, Exchange-Accounts, User, Subscription und Risk Settings aktiv beziehungsweise gueltig sind.
 
 Es gibt bewusst kein `DELETE`. Beziehungen werden deaktiviert, damit Verlauf und Auditierbarkeit erhalten bleiben.
 Create- und Patch-Aktionen fuer Copy-Relationships schreiben transaktionale Audit-Logs ohne Admin-Token oder Request-Header.
@@ -94,11 +104,15 @@ Wenn `pip` in der vorhandenen venv fehlt:
 - Copy-Relationship-Verwaltung existiert als Admin-API, aber noch nicht ueber UI.
 - Identity-Foundation mit Users/Roles/API-Credentials existiert, aber noch ohne Login, Session, JWT, Passwortfluss oder UI-Verwaltung.
 - Admin-Credentials koennen per Admin-API erzeugt, gelistet, deaktiviert und rotiert werden.
+- Subscription-, Exchange-Account- und Risk-Gates existieren als Foundation-Controls.
+- Dead-Letter-Events werden in PostgreSQL gespeichert und koennen administrativ gelistet werden.
+- GitHub Actions CI prueft Ruff, Pytest, Alembic-Heads und einfache Secret-Pattern.
 - Admin-Aenderungen an Copy-Relationships werden auditierbar gespeichert.
 - Execution-Requests und Execution-Results werden persistiert.
 - Result-Events koennen Request-Status auf `ACCEPTED`, `REJECTED`, `FILLED` oder `FAILED` setzen.
 - NATS-Consumer haben begrenzte Retry-Zustellung und schreiben nach finalem Fehler auf `system.dead_letter.created`.
 - DLQ-Reprocessing und Alerting sind noch nicht implementiert.
+- Echte Secret-Verschluesselung beziehungsweise Secret-Manager-Integration ist noch nicht implementiert; aktuell wird nur eine Secret-Referenz gespeichert.
 
 ## Verifikationspflicht vor echter Order-Ausfuehrung
 
