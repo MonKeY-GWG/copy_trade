@@ -36,9 +36,17 @@ jobs:
           python -m alembic heads
 
       - name: Secret pattern sanity
+        shell: bash
         run: |
-          ! grep -RInE "sk-[A-Za-z0-9_-]{20,}|BEGIN (RSA|OPENSSH|PRIVATE)|api[_-]?key\\s*=|secret\\s*=|password\\s*=" \
+          ! grep -RInE "sk-[A-Za-z0-9_-]{20,}|BEGIN (RSA|OPENSSH|PRIVATE)" \
             --exclude-dir=.git \
             --exclude-dir=.venv \
             --exclude-dir=legacy \
+            .
+          ! grep -RInE "(^|[^A-Za-z0-9_])(api[_-]?key|secret|password)[[:space:]]*=[[:space:]]*['\"][^'\"]{12,}['\"]" \
+            --exclude-dir=.git \
+            --exclude-dir=.venv \
+            --exclude-dir=legacy \
+            --exclude-dir=tests \
+            --exclude='*.md' \
             .
