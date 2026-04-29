@@ -5,16 +5,19 @@ on:
     branches: ["main"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -41,12 +44,52 @@ jobs:
           ! grep -RInE "sk-[A-Za-z0-9_-]{20,}|BEGIN (RSA|OPENSSH|PRIVATE)" \
             --exclude-dir=.git \
             --exclude-dir=.venv \
+            --exclude-dir=node_modules \
             --exclude-dir=legacy \
             .
           ! grep -RInE "(^|[^A-Za-z0-9_])(api[_-]?key|secret|password)[[:space:]]*=[[:space:]]*['\"][^'\"]{12,}['\"]" \
             --exclude-dir=.git \
             --exclude-dir=.venv \
+            --exclude-dir=node_modules \
             --exclude-dir=legacy \
             --exclude-dir=tests \
             --exclude='*.md' \
             .
+
+  web:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install web dependencies
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Web typecheck
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Web audit
+        working-directory: apps/web
+        run: npm audit --audit-level=moderate
+
+      - name: Web build
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Web E2E smoke
+        working-directory: apps/web
+        run: npm run test:e2e

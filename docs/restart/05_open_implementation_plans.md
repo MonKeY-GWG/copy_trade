@@ -1,6 +1,6 @@
 # Offene Implementierungsplaene
 
-Stand: 2026-04-27
+Stand: 2026-04-29
 
 Diese Datei konkretisiert die zentralen `OFFEN`-Punkte aus `docs/restart/04_environment_verification.md`.
 Die Reihenfolge entspricht der aktuellen Prioritaet von oben nach unten.
@@ -28,7 +28,22 @@ Die Reihenfolge entspricht der aktuellen Prioritaet von oben nach unten.
   - Navigation/Platzhalter fuer die weiteren Foundation-Controls
 - OFFEN: Password-Change-/Reset-Flow fehlt noch
 - OFFEN: UI fuer Users/Roles fehlt noch
-- OFFEN: Browser-E2E-Tests fuer die Foundation-Control-UI fehlen noch
+- Browser-E2E-Fundament ist begonnen:
+  - Login und Rendering der Foundation-Panels
+  - Admin-Credential-Create mit CSRF-Header-Pruefung
+  - Logout mit CSRF-Header-Pruefung
+  - Subscription-Upsert mit CSRF-Header- und Payload-Pruefung
+  - Admin-Credential-Rotate/Deactivate mit CSRF-Header-Pruefung
+  - Exchange-Account-Create mit CSRF-Header- und Payload-Pruefung
+  - Exchange-Account-Status-Patch mit CSRF-Header- und Payload-Pruefung
+  - Copy-Relationship-Create/Deactivate mit CSRF-Header- und Payload-Pruefung
+  - Risk-Settings-Load/Upsert mit CSRF-Header- und Payload-Pruefung
+  - DLQ- und Audit-Filter
+  - Exchange-Account-Secret-Clear mit CSRF-Header- und Payload-Pruefung
+  - Copy-Relationship-Activate mit CSRF-Header- und Payload-Pruefung
+  - GitHub Actions Web-Job fuer `npm ci`, Typecheck, Audit, Build und Playwright-Smokes
+  - GitHub Actions Token-Rechte auf `contents: read` begrenzt
+- OFFEN: Browser-E2E-Abdeckung fuer echte API-Integration gegen Docker/DB erweitern
 
 ### Ziel
 
@@ -104,8 +119,8 @@ Die UI soll Foundation-Controls nutzbar machen, ohne Security-Regeln aufzuweiche
 ### Verifikation
 
 - Backend: Pytest fuer Auth-Repository, API-Routen und Session-Ablauf.
-- Frontend: TypeScript-Check, Build, Audit, spaeter Komponenten-/API-Client-Tests.
-- E2E: Login, Navigation, Create/Update von Foundation-Controls, Logout.
+- Frontend: TypeScript-Check, Build, Audit, Playwright-Smokes, spaeter Komponenten-/API-Client-Tests.
+- E2E: ERLEDIGT begonnen fuer Login, Navigation, Logout, Admin-Credential-Create/Rotate/Deactivate, Subscription-Upsert, Exchange-Account-Create/Patch/Secret-Clear, Copy-Relationship-Create/Activate/Deactivate, Risk Settings sowie DLQ-/Audit-Filter; OFFEN fuer echte API-Integration.
 
 ## 2. DLQ-Reprocessing, Alerting und Retention
 
@@ -339,5 +354,6 @@ Bei mehreren API-Instanzen muss der Rate-Limit-State zentral geteilt werden.
 - `.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider`
 - `.\.venv\Scripts\ruff.exe check apps\api workers\copy_engine packages\domain packages\exchange_adapters packages\shared_events infra\migrations`
 - `.\.venv\Scripts\python.exe -m compileall -q apps workers packages`
+- `cmd /c npm run typecheck`, `cmd /c npm audit --audit-level=moderate`, `cmd /c npm run build` und `cmd /c npm run test:e2e` in `apps/web`
 - Docker-Smoke fuer betroffene Services
 - Session-Notiz in `docs/sessions/`

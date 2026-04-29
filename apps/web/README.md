@@ -26,3 +26,12 @@ cmd /c npm run dev
 ```
 
 The API must allow `http://localhost:3000` via `COPY_TRADE_CORS_ORIGINS`.
+
+Browser smoke tests:
+
+```powershell
+cd D:\VSC_Projekte\Copy_Trade\apps\web
+cmd /c npm run test:e2e
+```
+
+The Playwright smoke tests mock API responses and use the locally installed Chrome channel.

@@ -1,6 +1,6 @@
 # Environment Verification
 
-Stand: 2026-04-27
+Stand: 2026-04-29
 
 ## Git
 
@@ -195,9 +195,11 @@ Verifiziert:
 - `npm --version` meldet `11.12.1`.
 - `apps/web` ist als Next.js/TypeScript Operations Console initialisiert.
 - `cmd /c npm install` in `apps/web` erfolgreich.
+- `cmd /c npm ci` in `apps/web` erfolgreich.
 - `cmd /c npm audit --json` in `apps/web` meldet 0 Vulnerabilities.
 - `cmd /c npm run typecheck` in `apps/web` erfolgreich.
 - `cmd /c npm run build` in `apps/web` erfolgreich.
+- `cmd /c npm run test:e2e` in `apps/web` erfolgreich: 12 Playwright-Smokes passed.
 - Next.js Dev-Server antwortet lokal auf `http://localhost:3000` mit HTTP 200.
 - Operations Console enthaelt Login/Session sowie Admin-Credentials-UI fuer Create, List, Active/All-Filter, Rotate und Deactivate.
 - Operations Console enthaelt Subscription-UI fuer List, Status-Filter, Upsert und Copy-Trading-Gate.
@@ -225,7 +227,7 @@ OFFEN:
 
 - OFFEN: Password-Change-/Reset-Flow fehlt noch.
 - OFFEN: UI fuer Users/Roles fehlt noch.
-- OFFEN: Browser-E2E-Tests fuer die Foundation-Control-UI fehlen noch.
+- OFFEN: Browser-E2E-Abdeckung fuer echte API-Integration gegen Docker/DB erweitern.
 - OFFEN: DLQ-Reprocessing und Alerting fehlen noch.
 - OFFEN: Echte Secret-Manager-Integration fuer Exchange-Secrets fehlt noch.
 - OFFEN: Echte Exchange-Order-Ausfuehrung ist nicht angeschlossen.
@@ -234,3 +236,13 @@ OFFEN:
 Implementierungsplaene:
 
 - Die konkreten Schritte, Akzeptanzkriterien und Verifikationspunkte stehen in `docs/restart/05_open_implementation_plans.md`.
+
+## CI
+
+Verifiziert:
+
+- GitHub Actions fuer Commit `e49020d` erfolgreich: Run `25119182408`, Conclusion `success`.
+- `.github/workflows/ci.yml` enthaelt getrennte Jobs fuer Python/Foundation und Web.
+- GitHub Actions Token-Rechte sind auf `contents: read` begrenzt.
+- Python/Foundation-CI prueft Ruff, Pytest, Alembic-Heads und Secret-Pattern.
+- Web-CI prueft `npm ci`, Playwright Chromium Installation, Typecheck, Audit, Build und E2E-Smokes.
